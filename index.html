@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Voxa Bridge • Encrypted P2P Workspace</title>
+  <title>Voxa Chat</title>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <style>
     :root {
@@ -13,344 +13,342 @@
       --bubble-out: #005c4b;
       --bubble-in: #202c33;
       --emerald: #00a884;
-      --emerald-glow: rgba(0, 168, 132, 0.22);
       --text-main: #e9edef;
       --text-sub: #8696a0;
       --danger: #ef4444;
-      --amber: #f59e0b;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; -webkit-tap-highlight-color: transparent; }
     body {
       background-color: var(--bg-chat);
       background-image: radial-gradient(rgba(255,255,255,0.03) 1px, transparent 0);
-      background-size: 22px 22px;
+      background-size: 20px 20px;
       color: var(--text-main);
       height: 100dvh;
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      user-select: none;
     }
 
-    /* Premium WhatsApp-Style Header */
+    /* Clean WhatsApp Header */
     header {
       background: var(--bg-header);
-      padding: 10px 14px;
+      height: 58px;
+      padding: 0 12px 0 14px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.35);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
       z-index: 20;
-    }
-    .peer-profile { display: flex; align-items: center; gap: 11px; overflow: hidden; }
-    .avatar-ring {
-      width: 40px; height: 40px; border-radius: 50%;
-      background: linear-gradient(135deg, #00a884, #0284c7);
-      display: grid; place-items: center; font-size: 18px; flex-shrink: 0;
       position: relative;
     }
-    .live-badge {
-      position: absolute; bottom: 0; right: 0; width: 11px; height: 11px;
-      border-radius: 50%; background: var(--amber); border: 2px solid var(--bg-header);
-      transition: background 0.3s, box-shadow 0.3s;
+    .peer-info { display: flex; align-items: center; gap: 11px; overflow: hidden; }
+    .avatar {
+      width: 40px; height: 40px; border-radius: 50%;
+      background: linear-gradient(135deg, #00a884, #0284c7);
+      display: grid; place-items: center; flex-shrink: 0; position: relative;
     }
-    .live-badge.online { background: #22c55e; box-shadow: 0 0 8px #22c55e; }
-
-    .peer-meta { overflow: hidden; }
-    .peer-title { font-size: 15.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .peer-status { font-size: 12px; color: var(--text-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
-    .peer-status.online { color: #22c55e; font-weight: 500; }
-
-    .top-btns { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
-    .icon-pill {
-      background: rgba(255,255,255,0.07); color: var(--text-main); border: 1px solid rgba(255,255,255,0.08);
-      padding: 6px 10px; border-radius: 20px; font-size: 11.5px; font-weight: 500; cursor: pointer;
+    .dot {
+      position: absolute; bottom: 1px; right: 1px; width: 10px; height: 10px;
+      border-radius: 50%; background: #64748b; border: 2px solid var(--bg-header);
     }
-    .icon-pill:active { transform: scale(0.96); }
+    .dot.online { background: #22c55e; }
+    .title-wrap { overflow: hidden; }
+    .peer-name { font-size: 16px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .peer-sub { font-size: 12px; color: var(--text-sub); margin-top: 1px; }
+    .peer-sub.online { color: #22c55e; }
 
-    /* Live Connection Banner */
-    #connBanner {
-      background: rgba(34, 197, 94, 0.14);
-      border-bottom: 1px solid rgba(34, 197, 94, 0.25);
-      color: #4ade80;
-      font-size: 11.5px;
-      padding: 5px 12px;
-      text-align: center;
-      display: none;
-      font-weight: 500;
+    /* 3-Dot Overflow Menu */
+    .menu-btn {
+      width: 38px; height: 38px; border-radius: 50%; border: none;
+      background: transparent; color: var(--text-sub); display: grid; place-items: center; cursor: pointer;
     }
-    #connBanner.offline {
-      display: block;
-      background: rgba(245, 158, 11, 0.12);
-      border-bottom: 1px solid rgba(245, 158, 11, 0.25);
-      color: #fbbf24;
+    .menu-btn:active { background: rgba(255,255,255,0.08); }
+    .dropdown {
+      position: absolute; top: 54px; right: 12px; background: #233138;
+      border-radius: 10px; padding: 6px 0; min-width: 165px;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.45); display: none; z-index: 40;
+    }
+    .dropdown button {
+      width: 100%; background: none; border: none; color: var(--text-main);
+      text-align: left; padding: 11px 16px; font-size: 14px; cursor: pointer;
+    }
+    .dropdown button:hover { background: rgba(255,255,255,0.06); }
+
+    /* Context Action Bar (On Long-Press Bubble) */
+    #copyBar {
+      position: fixed; top: 0; left: 0; right: 0; height: 58px;
+      background: #1f2c34; display: none; align-items: center;
+      justify-content: space-between; padding: 0 16px; z-index: 35;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    #copyBar button {
+      background: none; border: none; color: var(--text-main);
+      font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 6px; cursor: pointer;
     }
 
     /* Chat Stream */
     #chatStream {
-      flex: 1;
-      overflow-y: auto;
-      padding: 12px 14px;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      scroll-behavior: smooth;
+      flex: 1; overflow-y: auto; padding: 12px 14px;
+      display: flex; flex-direction: column; gap: 6px;
     }
-    .e2ee-notice {
-      align-self: center;
-      background: #182229;
-      color: #ffd279;
-      font-size: 11.5px;
-      padding: 7px 14px;
-      border-radius: 10px;
-      text-align: center;
-      max-width: 90%;
-      margin-bottom: 6px;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    .e2ee-pill {
+      align-self: center; background: #182229; color: #ffd279;
+      font-size: 11.5px; padding: 6px 12px; border-radius: 9px;
+      text-align: center; max-width: 88%; margin-bottom: 4px;
     }
-
-    /* WhatsApp Chat Bubbles */
-    .msg-row { display: flex; flex-direction: column; max-width: 82%; position: relative; }
+    .msg-row { display: flex; flex-direction: column; max-width: 80%; }
     .msg-row.out { align-self: flex-end; }
     .msg-row.in { align-self: flex-start; }
 
     .bubble {
-      padding: 8px 11px 6px 11px;
-      border-radius: 12px;
+      padding: 7px 10px 5px 10px;
+      border-radius: 11px;
       font-size: 14.5px;
-      line-height: 1.4;
+      line-height: 1.38;
       word-break: break-word;
-      box-shadow: 0 1px 1.5px rgba(0,0,0,0.28);
+      box-shadow: 0 1px 1px rgba(0,0,0,0.25);
+      transition: filter 0.15s;
     }
+    .bubble.selected { filter: brightness(1.25); outline: 1.5px solid var(--emerald); }
     .msg-row.out .bubble { background: var(--bubble-out); border-top-right-radius: 2px; }
     .msg-row.in .bubble { background: var(--bubble-in); border-top-left-radius: 2px; }
 
-    .bubble img {
-      max-width: 100%; max-height: 240px; border-radius: 8px;
-      margin-bottom: 5px; display: block; cursor: pointer;
+    .bubble img, .bubble video {
+      max-width: 100%; max-height: 230px; border-radius: 8px;
+      margin-bottom: 4px; display: block;
     }
-    .doc-box {
-      background: rgba(0,0,0,0.24);
-      padding: 10px;
-      border-radius: 9px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 4px;
+    .doc-card {
+      background: rgba(0,0,0,0.22); padding: 9px 10px; border-radius: 8px;
+      display: flex; align-items: center; gap: 10px; margin-bottom: 3px;
     }
-    .doc-icon {
-      width: 36px; height: 36px; border-radius: 8px;
-      background: rgba(0,168,132,0.2); color: var(--emerald);
-      display: grid; place-items: center; font-weight: 700; font-size: 12px; flex-shrink: 0;
+    .doc-badge {
+      width: 34px; height: 34px; border-radius: 7px; background: rgba(0,168,132,0.2);
+      color: var(--emerald); display: grid; place-items: center; font-size: 11px; font-weight: 700; flex-shrink: 0;
     }
-    .doc-meta { flex: 1; overflow: hidden; }
-    .doc-title { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .doc-sub { font-size: 11px; color: var(--text-sub); margin-top: 2px; }
-
-    .meta-row {
-      display: flex; align-items: center; justify-content: flex-end; gap: 6px;
-      margin-top: 3px; font-size: 10.5px; color: rgba(233,237,239,0.65);
-    }
-    .ticks { color: #53bdeb; font-weight: bold; font-size: 11.5px; }
-    .act-chip {
-      background: rgba(255,255,255,0.12); color: #fff; border: none;
-      padding: 2px 8px; border-radius: 6px; font-size: 10.5px; cursor: pointer; text-decoration: none;
+    .doc-info { flex: 1; overflow: hidden; }
+    .doc-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .doc-size { font-size: 11px; color: var(--text-sub); }
+    .dl-link {
+      color: var(--emerald); font-size: 12px; font-weight: 600; text-decoration: none; padding: 4px 6px;
     }
 
-    /* Bottom WhatsApp Input Bar */
-    .input-dock {
+    .meta {
+      display: flex; align-items: center; justify-content: flex-end; gap: 3px;
+      margin-top: 2px; font-size: 10.5px; color: rgba(233,237,239,0.65);
+    }
+    .tick-svg { width: 15px; height: 11px; display: inline-block; vertical-align: middle; }
+
+    /* Exact WhatsApp Input Dock */
+    .dock {
       background: var(--bg-chat);
       padding: 6px 8px 8px 8px;
       display: flex;
-      align-items: center;
+      align-items: flex-end;
       gap: 7px;
     }
-    .pill-input-wrap {
-      flex: 1;
-      background: var(--bg-header);
-      border-radius: 24px;
-      display: flex;
-      align-items: center;
-      padding: 2px 8px 2px 14px;
-      min-height: 46px;
+    .input-pill {
+      flex: 1; background: var(--bg-header); border-radius: 24px;
+      display: flex; align-items: center; padding: 2px 6px 2px 15px; min-height: 46px;
     }
-    .pill-input-wrap input {
+    .input-pill input {
       flex: 1; background: transparent; border: none; color: var(--text-main);
-      font-size: 15px; outline: none; padding: 8px 0;
+      font-size: 15px; outline: none; padding: 9px 0;
     }
-    .clip-btn {
-      background: transparent; border: none; color: var(--text-sub);
-      font-size: 20px; padding: 6px 8px; cursor: pointer; transform: rotate(-45deg);
+    .dock-icon-btn {
+      width: 36px; height: 36px; border-radius: 50%; border: none;
+      background: transparent; color: var(--text-sub); display: grid; place-items: center; cursor: pointer; flex-shrink: 0;
     }
-    .circle-send {
-      width: 46px; height: 46px; border-radius: 50%; border: none;
-      background: var(--emerald); color: #051b15; font-size: 18px;
-      display: grid; place-items: center; cursor: pointer; flex-shrink: 0;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.35);
-    }
-    .circle-send:active { transform: scale(0.94); }
+    .dock-icon-btn:active { background: rgba(255,255,255,0.08); }
 
-    /* Setup & Pairing Sheet */
+    .action-fab {
+      width: 46px; height: 46px; border-radius: 50%; border: none;
+      background: var(--emerald); color: #ffffff; display: grid; place-items: center;
+      cursor: pointer; flex-shrink: 0; box-shadow: 0 2px 5px rgba(0,0,0,0.35);
+    }
+    .action-fab.recording { background: var(--danger); animation: pulse 1.2s infinite; }
+    @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.08); } 100% { transform: scale(1); } }
+
+    /* Modals */
     .overlay {
-      position: fixed; inset: 0; background: rgba(6, 11, 16, 0.92);
-      backdrop-filter: blur(6px); display: none; align-items: center; justify-content: center;
+      position: fixed; inset: 0; background: rgba(6,11,16,0.92);
+      backdrop-filter: blur(5px); display: none; align-items: center; justify-content: center;
       padding: 16px; z-index: 50;
     }
-    .sheet {
-      background: var(--bg-header); width: 100%; max-width: 380px;
-      border-radius: 20px; padding: 22px; border: 1px solid rgba(255,255,255,0.09);
-      box-shadow: 0 12px 32px rgba(0,0,0,0.5);
+    .modal-card {
+      background: var(--bg-header); width: 100%; max-width: 370px;
+      border-radius: 18px; padding: 20px; border: 1px solid rgba(255,255,255,0.08);
     }
-    .sheet h2 { font-size: 18px; margin-bottom: 4px; }
-    .sheet p { font-size: 12.5px; color: var(--text-sub); margin-bottom: 14px; line-height: 1.4; }
-    .device-badge {
-      background: #111b21; border: 1px dashed rgba(0,168,132,0.45);
-      padding: 8px 12px; border-radius: 10px; font-size: 12px;
-      color: var(--emerald); margin-bottom: 14px; display: flex; justify-content: space-between;
+    .modal-card h2 { font-size: 17px; margin-bottom: 4px; }
+    .modal-card p { font-size: 12.5px; color: var(--text-sub); margin-bottom: 14px; }
+    .dev-tag {
+      background: #111b21; padding: 8px 12px; border-radius: 9px; font-size: 12px;
+      color: var(--emerald); margin-bottom: 12px; display: flex; justify-content: space-between;
     }
-    .grp { margin-bottom: 12px; }
-    .grp label { display: block; font-size: 11.5px; color: var(--text-sub); margin-bottom: 4px; }
-    .grp input, .grp select {
+    .fld { margin-bottom: 11px; }
+    .fld label { display: block; font-size: 11.5px; color: var(--text-sub); margin-bottom: 4px; }
+    .fld input, .fld select {
       width: 100%; background: #111b21; border: 1px solid rgba(255,255,255,0.12);
-      color: var(--text-main); padding: 11px 12px; border-radius: 11px; font-size: 14px; outline: none;
+      color: var(--text-main); padding: 10px 12px; border-radius: 10px; font-size: 14px; outline: none;
     }
-    .btn-full {
-      width: 100%; padding: 12px; border-radius: 12px; border: none;
-      background: var(--emerald); color: #041812; font-weight: 700; font-size: 14.5px; cursor: pointer;
+    .btn-save {
+      width: 100%; padding: 11px; border-radius: 11px; border: none;
+      background: var(--emerald); color: #041812; font-weight: 700; font-size: 14px; cursor: pointer;
     }
-    .btn-row { display: flex; gap: 10px; margin-top: 14px; }
-    .btn-row button { flex: 1; padding: 11px; border-radius: 11px; border: none; font-weight: 600; cursor: pointer; }
   </style>
 </head>
-<body>
+<body onclick="closeMenus()">
+
+  <!-- Long-Press Copy Action Bar -->
+  <div id="copyBar">
+    <button onclick="cancelSelection()">✕ Cancel</button>
+    <button onclick="copySelectedMessage()">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+      Copy
+    </button>
+  </div>
 
   <header>
-    <div class="peer-profile">
-      <div class="avatar-ring">
-        <span id="peerAvatarIcon">💻</span>
-        <span id="liveDot" class="live-badge"></span>
+    <div class="peer-info">
+      <div class="avatar">
+        <span id="avatarIcon" style="font-size:18px;">💻</span>
+        <span id="onlineDot" class="dot"></span>
       </div>
-      <div class="peer-meta">
-        <div class="peer-title" id="headerTitle">Voxa Secure Bridge</div>
-        <div class="peer-status" id="headerStatus">Initializing device ID...</div>
+      <div class="title-wrap">
+        <div class="peer-name" id="peerTitle">Paired Device</div>
+        <div class="peer-sub" id="peerStatus">Connecting...</div>
       </div>
     </div>
-    <div class="top-btns">
-      <button class="icon-pill" onclick="forceReconnect()" title="Reconnect">↻</button>
-      <button class="icon-pill" onclick="clearChat()">Clear</button>
-      <button class="icon-pill" onclick="openSettings()">Pairing</button>
+    <button class="menu-btn" onclick="toggleDropdown(event)" aria-label="Menu">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
+    </button>
+    <div id="topDropdown" class="dropdown" onclick="event.stopPropagation()">
+      <button onclick="openPairingModal()">Pairing Settings</button>
+      <button onclick="clearChatHistory()">Clear Chat</button>
     </div>
   </header>
 
-  <div id="connBanner" class="offline">⏳ Searching for paired device...</div>
-
   <div id="chatStream">
-    <div class="e2ee-notice">🔒 Messages &amp; files are End-to-End Encrypted with AES-256-GCM. Zero cloud storage. Safe on Hostel Wi-Fi.</div>
+    <div class="e2ee-pill">🔒 End-to-end encrypted. Chats stay locally for 30 days.</div>
   </div>
 
-  <div class="input-dock">
-    <div class="pill-input-wrap">
-      <input type="text" id="msgInput" placeholder="Message or paste link..." onkeydown="if(event.key==='Enter') handleSendText()" />
-      <input type="file" id="fileInput" multiple hidden />
-      <button class="clip-btn" title="Attach Photos / PDFs" onclick="document.getElementById('fileInput').click()">📎</button>
+  <!-- WhatsApp Input Dock -->
+  <div class="dock">
+    <div class="input-pill">
+      <input type="text" id="msgInput" placeholder="Message" oninput="updateFabIcon()" onkeydown="if(event.key==='Enter') handleFabClick()" />
+      <input type="file" id="docPicker" multiple hidden />
+      <input type="file" id="mediaPicker" accept="image/*,video/*" multiple hidden />
+      <!-- Document Attach Icon -->
+      <button class="dock-icon-btn" title="Attach Document" onclick="document.getElementById('docPicker').click()">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5a2.5 2.5 0 0 1 5 0v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5a2.5 2.5 0 0 0 5 0V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z"/></svg>
+      </button>
+      <!-- Direct Image/Video Gallery Icon -->
+      <button class="dock-icon-btn" title="Photos & Videos" onclick="document.getElementById('mediaPicker').click()">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
+      </button>
     </div>
-    <button class="circle-send" onclick="handleSendText()">➤</button>
+    <!-- Dynamic Mic / Send Button -->
+    <button id="fabAction" class="action-fab" onclick="handleFabClick()" aria-label="Voice or Send">
+      <svg id="iconMic" width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15a.998.998 0 0 0-.98-.85c-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08a6.993 6.993 0 0 0 5.91-5.78c.1-.6-.39-1.14-1-1.14z"/></svg>
+      <svg id="iconSend" width="21" height="21" viewBox="0 0 24 24" fill="currentColor" style="display:none; margin-left:2px;"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+    </button>
   </div>
 
-  <!-- Pairing Setup Modal -->
+  <!-- Pairing Modal -->
   <div id="setupModal" class="overlay">
-    <div class="sheet">
-      <h2>🔐 Pair Phone &amp; Laptop</h2>
-      <p>Use the same Room ID &amp; Secret PIN on both devices. Your Device ID is auto-assigned permanently.</p>
-      <div class="device-badge">
-        <span>My Auto Device ID:</span>
-        <strong id="myDeviceIdLabel">DEV-0000</strong>
+    <div class="modal-card" onclick="event.stopPropagation()">
+      <h2>Device Pairing</h2>
+      <p>Use the same Room ID &amp; PIN on your Phone and Laptop.</p>
+      <div class="dev-tag">
+        <span>My Device ID:</span>
+        <strong id="devIdText">VX-0000</strong>
       </div>
-      <div class="grp">
-        <label>Shared Room ID (e.g. rohit-cmf)</label>
+      <div class="fld">
+        <label>Room ID</label>
         <input type="text" id="inpRoom" placeholder="rohit-cmf" />
       </div>
-      <div class="grp">
-        <label>Secret Encryption PIN (4–12 chars)</label>
+      <div class="fld">
+        <label>Secret PIN</label>
         <input type="password" id="inpPin" placeholder="••••••" />
       </div>
-      <div class="grp">
-        <label>This Device</label>
+      <div class="fld">
+        <label>Device Type</label>
         <select id="inpRole">
-          <option value="phone">📱 Phone (CMF / Android)</option>
-          <option value="laptop">💻 Laptop (Windows / Chrome)</option>
+          <option value="phone">Phone</option>
+          <option value="laptop">Laptop</option>
         </select>
       </div>
-      <button class="btn-full" onclick="savePairingConfig()">Save &amp; Auto-Connect</button>
+      <button class="btn-save" onclick="savePairing()">Connect</button>
     </div>
   </div>
 
-  <!-- First-Time Security Approval Modal -->
+  <!-- Approval Modal -->
   <div id="approvalModal" class="overlay">
-    <div class="sheet" style="text-align:center; border-color: var(--emerald);">
-      <h2 style="margin-bottom:8px;">🛡️ New Device Request</h2>
-      <p id="approvalText">Device ID wants to connect.</p>
-      <div class="btn-row">
-        <button style="background:var(--danger); color:#fff;" onclick="decideIncoming(false)">Block</button>
-        <button style="background:var(--emerald); color:#041812;" onclick="decideIncoming(true)">Trust &amp; Allow</button>
+    <div class="modal-card" style="text-align:center;" onclick="event.stopPropagation()">
+      <h2 style="margin-bottom:6px;">Connection Request</h2>
+      <p id="approvalDesc">New device wants to pair.</p>
+      <div style="display:flex; gap:10px;">
+        <button style="flex:1; padding:10px; border-radius:10px; border:none; background:var(--danger); color:#fff; font-weight:600;" onclick="resolveApproval(false)">Block</button>
+        <button style="flex:1; padding:10px; border-radius:10px; border:none; background:var(--emerald); color:#041812; font-weight:600;" onclick="resolveApproval(true)">Allow</button>
       </div>
     </div>
   </div>
 
 <script>
-  const CFG_KEY = 'voxa_e2ee_cfg_v2';
-  const DEV_ID_KEY = 'voxa_auto_device_id_v2';
-  const TRUSTED_KEY = 'voxa_trusted_devices_v2';
-  const CHAT_KEY = 'voxa_chat_cache_v2';
+  const CFG_KEY = 'voxa_chat_cfg_v3';
+  const DEV_KEY = 'voxa_dev_id_v3';
+  const TRUST_KEY = 'voxa_trusted_v3';
+  const MSG_KEY = 'voxa_text_msgs_v3';
+  const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
+  const MAX_STORAGE_BYTES = 9.5 * 1024 * 1024; // Strict <10MB text limit
 
-  let peer = null;
-  let activeConn = null;
-  let pendingConn = null;
-  let aesKey = null;
-  let heartbeatTimer = null;
-  let reconnectTimer = null;
+  let peer = null, activeConn = null, pendingConn = null, aesKey = null;
+  let dialInterval = null, recognition = null, isRecording = false;
+  let selectedTextToCopy = '', selectedBubbleEl = null;
+  let unsentQueue = [];
 
-  // 1. Auto-generate permanent unique Device ID (like a phone number)
-  function getOrCreateDeviceId() {
-    let id = localStorage.getItem(DEV_ID_KEY);
+  const MY_DEV_ID = (() => {
+    let id = localStorage.getItem(DEV_KEY);
     if (!id) {
-      const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
-      const num = Math.floor(1000 + Math.random() * 9000);
-      id = `VX-${num}-${rand}`;
-      localStorage.setItem(DEV_ID_KEY, id);
+      id = 'VX-' + Math.floor(1000 + Math.random() * 9000) + '-' + Math.random().toString(36).slice(2, 5).toUpperCase();
+      localStorage.setItem(DEV_KEY, id);
     }
     return id;
-  }
+  })();
 
-  const MY_DEVICE_ID = getOrCreateDeviceId();
   let cfg = { room: '', pin: '', role: 'phone' };
 
-  // 2. AES-256-GCM Encryption Engine
-  async function buildCryptoKey(room, pin) {
+  // Tick SVGs (1: Single Grey, 2: Double Grey, 3: Double Blue/Green Seen)
+  function getTickSvg(state) {
+    if (state === 1) {
+      return `<svg class="tick-svg" viewBox="0 0 16 11" fill="none"><path d="M11.5 1L4.8 9.2L1.5 6" stroke="#8696a0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    }
+    const color = state === 3 ? '#34b7f1' : '#8696a0';
+    return `<svg class="tick-svg" viewBox="0 0 18 11" fill="none"><path d="M11.5 1L4.8 9.2L1.5 6" stroke="${color}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M16.5 1L9.8 9.2L8.2 7.5" stroke="${color}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  }
+
+  // AES-GCM Encryption
+  async function deriveKey(room, pin) {
     const enc = new TextEncoder();
-    const baseKey = await crypto.subtle.importKey('raw', enc.encode(pin), 'PBKDF2', false, ['deriveKey']);
+    const mat = await crypto.subtle.importKey('raw', enc.encode(pin), 'PBKDF2', false, ['deriveKey']);
     return crypto.subtle.deriveKey(
-      { name: 'PBKDF2', salt: enc.encode('voxa-e2ee-' + room), iterations: 80000, hash: 'SHA-256' },
-      baseKey,
-      { name: 'AES-GCM', length: 256 },
-      false,
-      ['encrypt', 'decrypt']
+      { name: 'PBKDF2', salt: enc.encode('voxa-' + room), iterations: 60000, hash: 'SHA-256' },
+      mat, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']
     );
   }
-
-  async function encryptBytes(buffer) {
+  async function encryptBuf(buf) {
     const iv = crypto.getRandomValues(new Uint8Array(12));
-    const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, aesKey, buffer);
-    return { iv: Array.from(iv), payload: encrypted };
+    const data = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, aesKey, buf);
+    return { iv: Array.from(iv), data };
+  }
+  async function decryptBuf(iv, data) {
+    return crypto.subtle.decrypt({ name: 'AES-GCM', iv: new Uint8Array(iv) }, aesKey, data);
   }
 
-  async function decryptBytes(ivArr, encryptedBuf) {
-    return crypto.subtle.decrypt({ name: 'AES-GCM', iv: new Uint8Array(ivArr) }, aesKey, encryptedBuf);
-  }
-
-  // 3. Boot & URL Auto-Config
   window.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('myDeviceIdLabel').textContent = MY_DEVICE_ID;
-    loadSavedChat();
+    document.getElementById('devIdText').textContent = MY_DEV_ID;
+    restoreTextHistory();
+    setupSpeechRecognition();
 
     const params = new URLSearchParams(location.search);
     const saved = JSON.parse(localStorage.getItem(CFG_KEY) || '{}');
@@ -363,377 +361,444 @@
     document.getElementById('inpRoom').value = cfg.room;
     document.getElementById('inpPin').value = cfg.pin;
     document.getElementById('inpRole').value = cfg.role;
-    document.getElementById('peerAvatarIcon').textContent = cfg.role === 'phone' ? '💻' : '📱';
-    document.getElementById('headerTitle').textContent = cfg.role === 'phone' ? 'My Laptop (E2EE)' : 'My Phone (E2EE)';
+    updateHeaderIdentity();
 
     if (cfg.room && cfg.pin.length >= 4) {
-      startEncryptedBridge();
+      connectBridge();
     } else {
       document.getElementById('setupModal').style.display = 'flex';
     }
   });
 
-  function openSettings() {
-    document.getElementById('setupModal').style.display = 'flex';
+  // Notify peer when user actually views the screen -> turns double ticks green/blue
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') sendReadReceipt();
+  });
+  window.addEventListener('focus', sendReadReceipt);
+
+  function sendReadReceipt() {
+    if (activeConn && activeConn.open) {
+      activeConn.send({ type: 'seen_all' });
+    }
   }
 
-  function savePairingConfig() {
+  function updateHeaderIdentity() {
+    document.getElementById('avatarIcon').textContent = cfg.role === 'phone' ? '💻' : '📱';
+    document.getElementById('peerTitle').textContent = cfg.role === 'phone' ? 'My Laptop' : 'My Phone';
+  }
+
+  function toggleDropdown(e) {
+    e.stopPropagation();
+    const dd = document.getElementById('topDropdown');
+    dd.style.display = dd.style.display === 'block' ? 'none' : 'block';
+  }
+  function closeMenus() {
+    document.getElementById('topDropdown').style.display = 'none';
+  }
+  function openPairingModal() {
+    closeMenus();
+    document.getElementById('setupModal').style.display = 'flex';
+  }
+  function savePairing() {
     const room = document.getElementById('inpRoom').value.trim().toLowerCase().replace(/[^a-z0-9-_]/g, '');
     const pin = document.getElementById('inpPin').value.trim();
     const role = document.getElementById('inpRole').value;
-    if (!room || pin.length < 4) {
-      alert('Please enter a Room ID and at least a 4-digit PIN.');
-      return;
-    }
+    if (!room || pin.length < 4) return alert('Enter Room ID & min 4-digit PIN.');
     cfg = { room, pin, role };
     localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
     document.getElementById('setupModal').style.display = 'none';
-    document.getElementById('peerAvatarIcon').textContent = role === 'phone' ? '💻' : '📱';
-    document.getElementById('headerTitle').textContent = role === 'phone' ? 'My Laptop (E2EE)' : 'My Phone (E2EE)';
-    startEncryptedBridge();
+    updateHeaderIdentity();
+    connectBridge();
   }
 
-  function forceReconnect() {
-    setConnectionUI(false, 'Reconnecting tunnel...');
-    startEncryptedBridge();
-  }
-
-  // 4. Refresh-Proof Bidirectional PeerJS Engine
-  async function startEncryptedBridge() {
-    clearTimeout(reconnectTimer);
-    clearInterval(heartbeatTimer);
+  async function connectBridge() {
+    clearInterval(dialInterval);
     if (activeConn) { try { activeConn.close(); } catch (_) {} activeConn = null; }
     if (peer) { try { peer.destroy(); } catch (_) {} peer = null; }
 
-    aesKey = await buildCryptoKey(cfg.room, cfg.pin);
-
-    // Deterministic primary ID + fast fallback on refresh collision
-    const primaryId = `voxa2-${cfg.room}-${cfg.role}`;
-    const targetRole = cfg.role === 'phone' ? 'laptop' : 'phone';
-    const targetId = `voxa2-${cfg.room}-${targetRole}`;
-
-    setConnectionUI(false, `Connecting (${MY_DEVICE_ID})...`);
-    createPeerInstance(primaryId, targetId, false);
+    aesKey = await deriveKey(cfg.room, cfg.pin);
+    const baseId = `vx3-${cfg.room}-${cfg.role}`;
+    const targetId = `vx3-${cfg.room}-${cfg.role === 'phone' ? 'laptop' : 'phone'}`;
+    setOnlineUI(false, 'Connecting...');
+    initPeer(baseId, targetId, false);
   }
 
-  function createPeerInstance(myId, targetId, isFallback) {
+  function initPeer(myId, targetId, isTemp) {
     peer = new Peer(myId, {
       debug: 0,
-      config: {
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:global.stun.twilio.com:3478' }
-        ]
-      }
+      config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
     });
 
     peer.on('open', () => {
-      setConnectionUI(false, `Waiting for ${cfg.role === 'phone' ? 'Laptop' : 'Phone'}...`);
-      // Both sides proactively attempt dial so refresh from EITHER side reconnects immediately
-      attemptDial(targetId);
-      reconnectTimer = setInterval(() => {
-        if (!activeConn || !activeConn.open) {
-          attemptDial(targetId);
-        }
-      }, 3000);
+      setOnlineUI(false, 'Waiting...');
+      dialPeer(targetId);
+      dialInterval = setInterval(() => {
+        if (!activeConn || !activeConn.open) dialPeer(targetId);
+      }, 2800);
     });
 
     peer.on('connection', (conn) => {
-      // Strict 2-device lock
       if (activeConn && activeConn.open && activeConn.peer !== conn.peer) {
         conn.close();
         return;
       }
-      const remoteDevId = conn.metadata?.deviceId || 'Unknown';
-      const trustedList = JSON.parse(localStorage.getItem(TRUSTED_KEY) || '[]');
-
-      if (trustedList.includes(remoteDevId)) {
-        bindVerifiedChannel(conn);
+      const remoteDev = conn.metadata?.devId || '';
+      const trusted = JSON.parse(localStorage.getItem(TRUST_KEY) || '[]');
+      if (trusted.includes(remoteDev)) {
+        attachChannel(conn);
       } else {
         pendingConn = conn;
-        document.getElementById('approvalText').textContent =
-          `Device [${remoteDevId}] is requesting encrypted access to room "${cfg.room}".`;
+        document.getElementById('approvalDesc').textContent = `Allow device ${remoteDev} to connect?`;
         document.getElementById('approvalModal').style.display = 'flex';
       }
     });
 
     peer.on('error', (err) => {
-      // Fix for refresh collision: if old socket hasn't timed out yet, use temp ID to dial target immediately!
-      if (err.type === 'unavailable-id' && !isFallback) {
-        const tempId = `${myId}-${Math.floor(100 + Math.random() * 899)}`;
+      if (err.type === 'unavailable-id' && !isTemp) {
         try { peer.destroy(); } catch (_) {}
-        createPeerInstance(tempId, targetId, true);
+        initPeer(`${myId}-${Math.floor(100 + Math.random() * 899)}`, targetId, true);
       }
     });
   }
 
-  function attemptDial(targetId) {
-    if (!peer || peer.disconnected || peer.destroyed) return;
-    if (activeConn && activeConn.open) return;
+  function dialPeer(targetId) {
+    if (!peer || peer.disconnected || peer.destroyed || (activeConn && activeConn.open)) return;
     try {
-      const conn = peer.connect(targetId, {
-        reliable: true,
-        metadata: { deviceId: MY_DEVICE_ID, role: cfg.role }
-      });
-      bindVerifiedChannel(conn);
+      const conn = peer.connect(targetId, { reliable: true, metadata: { devId: MY_DEV_ID } });
+      attachChannel(conn);
     } catch (_) {}
   }
 
-  function decideIncoming(allow) {
+  function resolveApproval(allow) {
     document.getElementById('approvalModal').style.display = 'none';
     if (!pendingConn) return;
-    if (!allow) {
-      pendingConn.close();
-      pendingConn = null;
-      addSystemPill('🚫 Blocked unauthorized connection.');
-      return;
+    if (!allow) { pendingConn.close(); pendingConn = null; return; }
+    const devId = pendingConn.metadata?.devId;
+    if (devId) {
+      const t = JSON.parse(localStorage.getItem(TRUST_KEY) || '[]');
+      if (!t.includes(devId)) { t.push(devId); localStorage.setItem(TRUST_KEY, JSON.stringify(t)); }
     }
-    const remoteDevId = pendingConn.metadata?.deviceId;
-    if (remoteDevId) {
-      const trusted = JSON.parse(localStorage.getItem(TRUSTED_KEY) || '[]');
-      if (!trusted.includes(remoteDevId)) {
-        trusted.push(remoteDevId);
-        localStorage.setItem(TRUSTED_KEY, JSON.stringify(trusted));
-      }
-    }
-    bindVerifiedChannel(pendingConn);
+    attachChannel(pendingConn);
     pendingConn = null;
   }
 
-  function bindVerifiedChannel(conn) {
+  function attachChannel(conn) {
     conn.on('open', async () => {
-      // Send encrypted handshake challenge to verify PIN match
-      const challenge = await encryptBytes(new TextEncoder().encode('VOXA_HELLO_' + MY_DEVICE_ID));
-      conn.send({ type: 'handshake', iv: challenge.iv, payload: challenge.payload, devId: MY_DEVICE_ID });
+      const hello = await encryptBuf(new TextEncoder().encode('HELLO_' + MY_DEV_ID));
+      conn.send({ type: 'hello', iv: hello.iv, data: hello.data, devId: MY_DEV_ID });
     });
 
     conn.on('data', async (pkt) => {
-      try {
-        const plainBuf = await decryptBytes(pkt.iv, pkt.payload);
+      if (pkt.type === 'delivered') {
+        updateTickState(pkt.msgId, 2);
+        return;
+      }
+      if (pkt.type === 'seen_all') {
+        markAllOutgoingSeen();
+        return;
+      }
 
-        if (pkt.type === 'handshake') {
-          const msg = new TextDecoder().decode(plainBuf);
-          if (msg.startsWith('VOXA_HELLO_')) {
+      try {
+        const plain = await decryptBuf(pkt.iv, pkt.data);
+        if (pkt.type === 'hello') {
+          const str = new TextDecoder().decode(plain);
+          if (str.startsWith('HELLO_')) {
             activeConn = conn;
-            // Remember peer as trusted once PIN handshake succeeds
             if (pkt.devId) {
-              const trusted = JSON.parse(localStorage.getItem(TRUSTED_KEY) || '[]');
-              if (!trusted.includes(pkt.devId)) {
-                trusted.push(pkt.devId);
-                localStorage.setItem(TRUSTED_KEY, JSON.stringify(trusted));
-              }
+              const t = JSON.parse(localStorage.getItem(TRUST_KEY) || '[]');
+              if (!t.includes(pkt.devId)) { t.push(pkt.devId); localStorage.setItem(TRUST_KEY, JSON.stringify(t)); }
             }
-            setConnectionUI(true, `● Online • E2EE (${pkt.devId || 'Paired'})`);
-            if (!pkt.isAck) {
-              const ack = await encryptBytes(new TextEncoder().encode('VOXA_HELLO_' + MY_DEVICE_ID));
-              conn.send({ type: 'handshake', iv: ack.iv, payload: ack.payload, devId: MY_DEVICE_ID, isAck: true });
+            setOnlineUI(true, 'online');
+            if (!pkt.ack) {
+              const ack = await encryptBuf(new TextEncoder().encode('HELLO_' + MY_DEV_ID));
+              conn.send({ type: 'hello', iv: ack.iv, data: ack.data, devId: MY_DEV_ID, ack: true });
             }
+            flushUnsentQueue();
+            if (document.visibilityState === 'visible') sendReadReceipt();
           }
           return;
         }
 
-        if (pkt.type === 'ping') return;
-
         if (pkt.type === 'text') {
-          const text = new TextDecoder().decode(plainBuf);
-          appendChatBubble({ type: 'text', text, dir: 'in', time: getTimeStr() }, true);
+          const text = new TextDecoder().decode(plain);
+          renderBubble({ id: pkt.id, kind: 'text', text, dir: 'in', ts: Date.now() }, true);
+          conn.send({ type: 'delivered', msgId: pkt.id });
+          if (document.visibilityState === 'visible') sendReadReceipt();
         } else if (pkt.type === 'file') {
-          const blob = new Blob([plainBuf], { type: pkt.mime });
+          const blob = new Blob([plain], { type: pkt.mime });
           const url = URL.createObjectURL(blob);
-          appendChatBubble({
-            type: 'file', name: pkt.name, size: pkt.size, mime: pkt.mime, url, dir: 'in', time: getTimeStr()
-          }, false);
+          renderBubble({ id: pkt.id, kind: 'file', name: pkt.name, size: pkt.size, mime: pkt.mime, url, dir: 'in', ts: Date.now() }, false);
+          conn.send({ type: 'delivered', msgId: pkt.id });
+          if (document.visibilityState === 'visible') sendReadReceipt();
         }
-      } catch (e) {
-        setConnectionUI(false, '❌ PIN Mismatch! Check Settings');
-        addSystemPill('⚠️ Encryption PIN mismatch between Phone & Laptop.');
+      } catch (_) {
+        setOnlineUI(false, 'PIN Mismatch');
       }
     });
 
     conn.on('close', () => {
       if (activeConn === conn) {
         activeConn = null;
-        setConnectionUI(false, 'Reconnecting...');
+        setOnlineUI(false, 'Offline');
       }
     });
   }
 
-  function setConnectionUI(isOnline, statusText) {
-    const dot = document.getElementById('liveDot');
-    const statusEl = document.getElementById('headerStatus');
-    const banner = document.getElementById('connBanner');
+  function setOnlineUI(online, label) {
+    const dot = document.getElementById('onlineDot');
+    const sub = document.getElementById('peerStatus');
+    sub.textContent = label;
+    dot.className = online ? 'dot online' : 'dot';
+    sub.className = online ? 'peer-sub online' : 'peer-sub';
+  }
 
-    statusEl.textContent = statusText;
-    if (isOnline) {
-      dot.classList.add('online');
-      statusEl.classList.add('online');
-      banner.className = '';
-      banner.style.display = 'block';
-      banner.textContent = '🟢 Connected • End-to-End Encrypted Tunnel Active';
+  // Dynamic Mic / Send Toggle
+  function updateFabIcon() {
+    const hasText = document.getElementById('msgInput').value.trim().length > 0;
+    document.getElementById('iconMic').style.display = hasText ? 'none' : 'block';
+    document.getElementById('iconSend').style.display = hasText ? 'block' : 'none';
+  }
+
+  function handleFabClick() {
+    const val = document.getElementById('msgInput').value.trim();
+    if (val.length > 0) {
+      sendTextMessage();
     } else {
-      dot.classList.remove('online');
-      statusEl.classList.remove('online');
-      banner.className = 'offline';
-      banner.style.display = 'block';
-      banner.textContent = `⏳ ${statusText}`;
+      toggleVoiceTyping();
     }
   }
 
-  // 5. Messaging & Multi-File Sending
-  async function handleSendText() {
+  // Voice-to-Text (Fills input box so user can review & tap Send)
+  function setupSpeechRecognition() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return;
+    recognition = new SR();
+    recognition.lang = 'hi-IN';
+    recognition.interimResults = true;
+
+    recognition.onstart = () => {
+      isRecording = true;
+      document.getElementById('fabAction').classList.add('recording');
+    };
+    recognition.onresult = (e) => {
+      let transcript = '';
+      for (let i = 0; i < e.results.length; i++) transcript += e.results[i][0].transcript;
+      document.getElementById('msgInput').value = transcript;
+      updateFabIcon();
+    };
+    recognition.onend = () => {
+      isRecording = false;
+      document.getElementById('fabAction').classList.remove('recording');
+      updateFabIcon();
+    };
+  }
+
+  function toggleVoiceTyping() {
+    if (!recognition) return alert('Voice typing not supported in this browser.');
+    if (isRecording) recognition.stop();
+    else recognition.start();
+  }
+
+  // Send Text with Tick States (1 = Sent/Queued, 2 = Delivered, 3 = Seen)
+  async function sendTextMessage() {
     const inp = document.getElementById('msgInput');
     const text = inp.value.trim();
     if (!text) return;
     inp.value = '';
+    updateFabIcon();
 
-    appendChatBubble({ type: 'text', text, dir: 'out', time: getTimeStr() }, true);
+    const msgObj = { id: 'm-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5), kind: 'text', text, dir: 'out', ts: Date.now(), tick: 1 };
+    renderBubble(msgObj, true);
 
-    if (!activeConn || !activeConn.open) {
-      addSystemPill('⚠️ Waiting for other device to come online...');
-      return;
+    if (activeConn && activeConn.open) {
+      const enc = await encryptBuf(new TextEncoder().encode(text));
+      activeConn.send({ type: 'text', id: msgObj.id, iv: enc.iv, data: enc.data });
+    } else {
+      unsentQueue.push(msgObj);
     }
-    const enc = await encryptBytes(new TextEncoder().encode(text));
-    activeConn.send({ type: 'text', iv: enc.iv, payload: enc.payload });
   }
 
-  document.getElementById('fileInput').addEventListener('change', async (e) => {
+  async function flushUnsentQueue() {
+    if (!activeConn || !activeConn.open) return;
+    while (unsentQueue.length > 0) {
+      const m = unsentQueue.shift();
+      const enc = await encryptBuf(new TextEncoder().encode(m.text));
+      activeConn.send({ type: 'text', id: m.id, iv: enc.iv, data: enc.data });
+    }
+  }
+
+  // File & Media Pickers
+  document.getElementById('docPicker').addEventListener('change', handleFileSelect);
+  document.getElementById('mediaPicker').addEventListener('change', handleFileSelect);
+
+  async function handleFileSelect(e) {
     const files = Array.from(e.target.files || []);
-    for (const f of files) {
-      await sendSingleFile(f);
-    }
+    for (const f of files) await sendFile(f);
     e.target.value = '';
-  });
-
-  async function sendSingleFile(file) {
-    const localUrl = URL.createObjectURL(file);
-    appendChatBubble({
-      type: 'file', name: file.name, size: file.size, mime: file.type, url: localUrl, dir: 'out', time: getTimeStr()
-    }, false);
-
-    if (!activeConn || !activeConn.open) {
-      addSystemPill('⚠️ Other device offline — connect first to transfer file.');
-      return;
-    }
-    const buf = await file.arrayBuffer();
-    const enc = await encryptBytes(buf);
-    activeConn.send({
-      type: 'file',
-      name: file.name,
-      size: file.size,
-      mime: file.type || 'application/octet-stream',
-      iv: enc.iv,
-      payload: enc.payload
-    });
   }
 
-  // Android WebView Native Bridge Hook
+  async function sendFile(file) {
+    const localUrl = URL.createObjectURL(file);
+    const id = 'f-' + Date.now();
+    // Note: saveToStorage = false so media never bloats 10MB text storage
+    renderBubble({ id, kind: 'file', name: file.name, size: file.size, mime: file.type, url: localUrl, dir: 'out', ts: Date.now(), tick: 1 }, false);
+
+    if (!activeConn || !activeConn.open) return;
+    const buf = await file.arrayBuffer();
+    const enc = await encryptBuf(buf);
+    activeConn.send({ type: 'file', id, name: file.name, size: file.size, mime: file.type || 'application/octet-stream', iv: enc.iv, data: enc.data });
+  }
+
   window.receiveFileFromAndroid = async function(base64, name, mime) {
     const res = await fetch(`data:${mime};base64,${base64}`);
     const blob = await res.blob();
-    await sendSingleFile(new File([blob], name, { type: mime }));
+    await sendFile(new File([blob], name, { type: mime }));
   };
 
-  // 6. WhatsApp-Grade Bubble Rendering
-  function appendChatBubble(item, saveToLocal) {
+  // Bubble Rendering + Long-Press Copy
+  function renderBubble(msg, persistText) {
     const stream = document.getElementById('chatStream');
     const row = document.createElement('div');
-    row.className = `msg-row ${item.dir}`;
+    row.className = `msg-row ${msg.dir}`;
 
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
 
-    if (item.type === 'text') {
-      const txtDiv = document.createElement('div');
-      txtDiv.textContent = item.text;
-      bubble.appendChild(txtDiv);
+    if (msg.kind === 'text') {
+      const body = document.createElement('div');
+      body.textContent = msg.text;
+      bubble.appendChild(body);
 
-      const meta = document.createElement('div');
-      meta.className = 'meta-row';
-      const copyBtn = document.createElement('button');
-      copyBtn.className = 'act-chip';
-      copyBtn.textContent = 'Copy';
-      copyBtn.onclick = () => {
-        navigator.clipboard.writeText(item.text);
-        copyBtn.textContent = 'Copied ✓';
-        setTimeout(() => copyBtn.textContent = 'Copy', 1400);
+      // Long-press / Right-click to Copy
+      let pressTimer;
+      const triggerSelect = () => {
+        cancelSelection();
+        selectedTextToCopy = msg.text;
+        selectedBubbleEl = bubble;
+        bubble.classList.add('selected');
+        document.getElementById('copyBar').style.display = 'flex';
       };
-      meta.appendChild(copyBtn);
-
-      const timeSpan = document.createElement('span');
-      timeSpan.innerHTML = `${item.time} ${item.dir === 'out' ? '<span class="ticks">✓✓</span>' : ''}`;
-      meta.appendChild(timeSpan);
-      bubble.appendChild(meta);
+      bubble.addEventListener('touchstart', () => { pressTimer = setTimeout(triggerSelect, 450); }, { passive: true });
+      bubble.addEventListener('touchend', () => clearTimeout(pressTimer));
+      bubble.addEventListener('touchmove', () => clearTimeout(pressTimer));
+      bubble.addEventListener('contextmenu', (e) => { e.preventDefault(); triggerSelect(); });
     } else {
-      if ((item.mime || '').startsWith('image/')) {
+      const mType = msg.mime || '';
+      if (mType.startsWith('image/')) {
         const img = document.createElement('img');
-        img.src = item.url;
-        img.onclick = () => window.open(item.url, '_blank');
+        img.src = msg.url;
+        img.onclick = () => window.open(msg.url, '_blank');
         bubble.appendChild(img);
+      } else if (mType.startsWith('video/')) {
+        const vid = document.createElement('video');
+        vid.src = msg.url;
+        vid.controls = true;
+        bubble.appendChild(vid);
       }
-      const ext = (item.name.split('.').pop() || 'FILE').toUpperCase().slice(0, 4);
+      const ext = (msg.name.split('.').pop() || 'FILE').toUpperCase().slice(0, 4);
       const doc = document.createElement('div');
-      doc.className = 'doc-box';
+      doc.className = 'doc-card';
       doc.innerHTML = `
-        <div class="doc-icon">${escapeHtml(ext)}</div>
-        <div class="doc-meta">
-          <div class="doc-title">${escapeHtml(item.name)}</div>
-          <div class="doc-sub">${formatSize(item.size)}</div>
+        <div class="doc-badge">${escapeHtml(ext)}</div>
+        <div class="doc-info">
+          <div class="doc-name">${escapeHtml(msg.name)}</div>
+          <div class="doc-size">${formatBytes(msg.size)}</div>
         </div>
-        <a class="act-chip" href="${item.url}" download="${escapeHtml(item.name)}">⬇ Save</a>
+        <a class="dl-link" href="${msg.url}" download="${escapeHtml(msg.name)}">Save</a>
       `;
       bubble.appendChild(doc);
-
-      const meta = document.createElement('div');
-      meta.className = 'meta-row';
-      meta.innerHTML = `${item.time} ${item.dir === 'out' ? '<span class="ticks">✓✓</span>' : ''}`;
-      bubble.appendChild(meta);
     }
+
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    const timeStr = new Date(msg.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    meta.innerHTML = `<span>${timeStr}</span>` + (msg.dir === 'out' ? `<span id="tick-${msg.id}" class="out-tick" data-state="${msg.tick || 1}">${getTickSvg(msg.tick || 1)}</span>` : '');
+    bubble.appendChild(meta);
 
     row.appendChild(bubble);
     stream.appendChild(row);
     stream.scrollTop = stream.scrollHeight;
 
-    if (saveToLocal) {
-      const cache = JSON.parse(localStorage.getItem(CHAT_KEY) || '[]');
-      cache.push(item);
-      if (cache.length > 80) cache.shift();
-      localStorage.setItem(CHAT_KEY, JSON.stringify(cache));
+    if (persistText && msg.kind === 'text') {
+      saveTextTo30DayCache(msg);
     }
   }
 
-  function loadSavedChat() {
-    const cache = JSON.parse(localStorage.getItem(CHAT_KEY) || '[]');
-    cache.forEach(m => appendChatBubble(m, false));
+  function updateTickState(msgId, newState) {
+    const el = document.getElementById('tick-' + msgId);
+    if (el && Number(el.dataset.state) < newState) {
+      el.dataset.state = newState;
+      el.innerHTML = getTickSvg(newState);
+      updateCachedTick(msgId, newState);
+    }
   }
 
-  function clearChat() {
-    localStorage.removeItem(CHAT_KEY);
+  function markAllOutgoingSeen() {
+    document.querySelectorAll('.out-tick').forEach(el => {
+      if (Number(el.dataset.state) < 3) {
+        el.dataset.state = 3;
+        el.innerHTML = getTickSvg(3);
+      }
+    });
+    const list = JSON.parse(localStorage.getItem(MSG_KEY) || '[]');
+    list.forEach(m => { if (m.dir === 'out') m.tick = 3; });
+    localStorage.setItem(MSG_KEY, JSON.stringify(list));
+  }
+
+  // Long-press Copy Helpers
+  function cancelSelection() {
+    if (selectedBubbleEl) selectedBubbleEl.classList.remove('selected');
+    selectedBubbleEl = null;
+    selectedTextToCopy = '';
+    document.getElementById('copyBar').style.display = 'none';
+  }
+  function copySelectedMessage() {
+    if (selectedTextToCopy) navigator.clipboard.writeText(selectedTextToCopy);
+    cancelSelection();
+  }
+
+  // 30-Day Local Storage (Text Only, Strictly Under 10MB)
+  function saveTextTo30DayCache(msg) {
+    let list = JSON.parse(localStorage.getItem(MSG_KEY) || '[]');
+    const cutoff = Date.now() - THIRTY_DAYS;
+    list = list.filter(m => m.ts >= cutoff);
+    list.push({ id: msg.id, kind: 'text', text: msg.text, dir: msg.dir, ts: msg.ts, tick: msg.tick || 1 });
+
+    let serialized = JSON.stringify(list);
+    while (serialized.length > MAX_STORAGE_BYTES && list.length > 1) {
+      list.shift();
+      serialized = JSON.stringify(list);
+    }
+    localStorage.setItem(MSG_KEY, serialized);
+  }
+
+  function updateCachedTick(msgId, state) {
+    const list = JSON.parse(localStorage.getItem(MSG_KEY) || '[]');
+    const item = list.find(m => m.id === msgId);
+    if (item) { item.tick = state; localStorage.setItem(MSG_KEY, JSON.stringify(list)); }
+  }
+
+  function restoreTextHistory() {
+    const cutoff = Date.now() - THIRTY_DAYS;
+    let list = JSON.parse(localStorage.getItem(MSG_KEY) || '[]').filter(m => m.ts >= cutoff);
+    localStorage.setItem(MSG_KEY, JSON.stringify(list));
+    list.forEach(m => renderBubble(m, false));
+  }
+
+  function clearChatHistory() {
+    closeMenus();
+    localStorage.removeItem(MSG_KEY);
     document.getElementById('chatStream').innerHTML =
-      '<div class="e2ee-notice">🧹 Chat cleared. Encrypted tunnel still active.</div>';
+      '<div class="e2ee-pill">🔒 End-to-end encrypted. Chats stay locally for 30 days.</div>';
   }
 
-  function addSystemPill(text) {
-    const stream = document.getElementById('chatStream');
-    const pill = document.createElement('div');
-    pill.className = 'e2ee-notice';
-    pill.textContent = text;
-    stream.appendChild(pill);
-    stream.scrollTop = stream.scrollHeight;
+  function formatBytes(b) {
+    if (!b) return '0 B';
+    const u = ['B', 'KB', 'MB', 'GB'], i = Math.floor(Math.log(b) / Math.log(1024));
+    return (b / Math.pow(1024, i)).toFixed(1) + ' ' + u[i];
   }
-
-  function getTimeStr() {
-    return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  }
-
-  function formatSize(bytes) {
-    if (!bytes) return '0 B';
-    const units = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(1024));
-    return (bytes / Math.pow(1024, i)).toFixed(1) + ' ' + units[i];
-  }
-
-  function escapeHtml(str) {
-    return str.replace(/[&<>"']/g, m => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
   }
 </script>
 </body>
