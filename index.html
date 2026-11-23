@@ -9,7 +9,6 @@
     :root {
       --bg-chat: #0b141a;
       --bg-header: #1f2c34;
-      --bg-input: #2a3942;
       --bubble-out: #005c4b;
       --bubble-in: #202c33;
       --emerald: #00a884;
@@ -30,11 +29,11 @@
       user-select: none;
     }
 
-    /* Clean WhatsApp Header */
+    /* Header */
     header {
       background: var(--bg-header);
       height: 58px;
-      padding: 0 12px 0 14px;
+      padding: 0 10px 0 14px;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -58,15 +57,15 @@
     .peer-sub { font-size: 12px; color: var(--text-sub); margin-top: 1px; }
     .peer-sub.online { color: #22c55e; }
 
-    /* 3-Dot Overflow Menu */
-    .menu-btn {
+    .header-actions { display: flex; align-items: center; gap: 2px; }
+    .icon-btn {
       width: 38px; height: 38px; border-radius: 50%; border: none;
-      background: transparent; color: var(--text-sub); display: grid; place-items: center; cursor: pointer;
+      background: transparent; color: var(--text-main); display: grid; place-items: center; cursor: pointer;
     }
-    .menu-btn:active { background: rgba(255,255,255,0.08); }
+    .icon-btn:active { background: rgba(255,255,255,0.08); }
     .dropdown {
       position: absolute; top: 54px; right: 12px; background: #233138;
-      border-radius: 10px; padding: 6px 0; min-width: 165px;
+      border-radius: 10px; padding: 6px 0; min-width: 170px;
       box-shadow: 0 6px 20px rgba(0,0,0,0.45); display: none; z-index: 40;
     }
     .dropdown button {
@@ -75,7 +74,7 @@
     }
     .dropdown button:hover { background: rgba(255,255,255,0.06); }
 
-    /* Context Action Bar (On Long-Press Bubble) */
+    /* Long-Press Copy Action Bar */
     #copyBar {
       position: fixed; top: 0; left: 0; right: 0; height: 58px;
       background: #1f2c34; display: none; align-items: center;
@@ -102,13 +101,9 @@
     .msg-row.in { align-self: flex-start; }
 
     .bubble {
-      padding: 7px 10px 5px 10px;
-      border-radius: 11px;
-      font-size: 14.5px;
-      line-height: 1.38;
-      word-break: break-word;
+      padding: 7px 10px 5px 10px; border-radius: 11px;
+      font-size: 14.5px; line-height: 1.38; word-break: break-word;
       box-shadow: 0 1px 1px rgba(0,0,0,0.25);
-      transition: filter 0.15s;
     }
     .bubble.selected { filter: brightness(1.25); outline: 1.5px solid var(--emerald); }
     .msg-row.out .bubble { background: var(--bubble-out); border-top-right-radius: 2px; }
@@ -129,9 +124,7 @@
     .doc-info { flex: 1; overflow: hidden; }
     .doc-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .doc-size { font-size: 11px; color: var(--text-sub); }
-    .dl-link {
-      color: var(--emerald); font-size: 12px; font-weight: 600; text-decoration: none; padding: 4px 6px;
-    }
+    .dl-link { color: var(--emerald); font-size: 12px; font-weight: 600; text-decoration: none; padding: 4px 6px; }
 
     .meta {
       display: flex; align-items: center; justify-content: flex-end; gap: 3px;
@@ -139,13 +132,10 @@
     }
     .tick-svg { width: 15px; height: 11px; display: inline-block; vertical-align: middle; }
 
-    /* Exact WhatsApp Input Dock */
+    /* Input Dock */
     .dock {
-      background: var(--bg-chat);
-      padding: 6px 8px 8px 8px;
-      display: flex;
-      align-items: flex-end;
-      gap: 7px;
+      background: var(--bg-chat); padding: 6px 8px 8px 8px;
+      display: flex; align-items: flex-end; gap: 7px;
     }
     .input-pill {
       flex: 1; background: var(--bg-header); border-radius: 24px;
@@ -159,21 +149,42 @@
       width: 36px; height: 36px; border-radius: 50%; border: none;
       background: transparent; color: var(--text-sub); display: grid; place-items: center; cursor: pointer; flex-shrink: 0;
     }
-    .dock-icon-btn:active { background: rgba(255,255,255,0.08); }
-
     .action-fab {
       width: 46px; height: 46px; border-radius: 50%; border: none;
       background: var(--emerald); color: #ffffff; display: grid; place-items: center;
       cursor: pointer; flex-shrink: 0; box-shadow: 0 2px 5px rgba(0,0,0,0.35);
     }
-    .action-fab.recording { background: var(--danger); animation: pulse 1.2s infinite; }
+    .action-fab.recording { background: var(--danger); animation: pulse 1.1s infinite; }
     @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.08); } 100% { transform: scale(1); } }
+
+    /* Fullscreen Call Overlay */
+    #callOverlay {
+      position: fixed; inset: 0; background: #0b141a; display: none;
+      flex-direction: column; justify-content: space-between; z-index: 70;
+    }
+    #remoteVideo { width: 100%; height: 100%; object-fit: cover; background: #091015; }
+    #localVideo {
+      position: absolute; top: 20px; right: 16px; width: 105px; height: 150px;
+      border-radius: 12px; object-fit: cover; border: 2px solid rgba(255,255,255,0.2); background: #1f2c34;
+    }
+    .call-top-info {
+      position: absolute; top: 24px; left: 20px; z-index: 5;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+    }
+    .call-controls {
+      position: absolute; bottom: 32px; left: 0; right: 0;
+      display: flex; justify-content: center; gap: 22px; z-index: 5;
+    }
+    .call-btn {
+      width: 56px; height: 56px; border-radius: 50%; border: none;
+      display: grid; place-items: center; color: #fff; font-size: 20px; cursor: pointer;
+    }
 
     /* Modals */
     .overlay {
-      position: fixed; inset: 0; background: rgba(6,11,16,0.92);
+      position: fixed; inset: 0; background: rgba(6,11,16,0.94);
       backdrop-filter: blur(5px); display: none; align-items: center; justify-content: center;
-      padding: 16px; z-index: 50;
+      padding: 16px; z-index: 60;
     }
     .modal-card {
       background: var(--bg-header); width: 100%; max-width: 370px;
@@ -199,7 +210,7 @@
 </head>
 <body onclick="closeMenus()">
 
-  <!-- Long-Press Copy Action Bar -->
+  <!-- Long-Press Copy Bar -->
   <div id="copyBar">
     <button onclick="cancelSelection()">✕ Cancel</button>
     <button onclick="copySelectedMessage()">
@@ -208,6 +219,7 @@
     </button>
   </div>
 
+  <!-- Header with Video/Audio Call & Menu -->
   <header>
     <div class="peer-info">
       <div class="avatar">
@@ -219,39 +231,76 @@
         <div class="peer-sub" id="peerStatus">Connecting...</div>
       </div>
     </div>
-    <button class="menu-btn" onclick="toggleDropdown(event)" aria-label="Menu">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
-    </button>
+
+    <div class="header-actions">
+      <!-- Video Call Button -->
+      <button class="icon-btn" title="Video Call" onclick="startCall(true)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+      </button>
+      <!-- Audio Call Button -->
+      <button class="icon-btn" title="Audio Call" onclick="startCall(false)">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
+      </button>
+      <!-- 3-Dot Menu -->
+      <button class="icon-btn" onclick="toggleDropdown(event)" aria-label="Menu">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
+      </button>
+    </div>
+
     <div id="topDropdown" class="dropdown" onclick="event.stopPropagation()">
       <button onclick="openPairingModal()">Pairing Settings</button>
       <button onclick="clearChatHistory()">Clear Chat</button>
+      <button onclick="lockApp()">Lock App</button>
     </div>
   </header>
 
   <div id="chatStream">
-    <div class="e2ee-pill">🔒 End-to-end encrypted. Chats stay locally for 30 days.</div>
+    <div class="e2ee-pill">🔒 End-to-end encrypted. Chats auto-roll at 30 days or 10MB.</div>
   </div>
 
-  <!-- WhatsApp Input Dock -->
+  <!-- Input Dock -->
   <div class="dock">
     <div class="input-pill">
       <input type="text" id="msgInput" placeholder="Message" oninput="updateFabIcon()" onkeydown="if(event.key==='Enter') handleFabClick()" />
       <input type="file" id="docPicker" multiple hidden />
       <input type="file" id="mediaPicker" accept="image/*,video/*" multiple hidden />
-      <!-- Document Attach Icon -->
       <button class="dock-icon-btn" title="Attach Document" onclick="document.getElementById('docPicker').click()">
         <svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5a2.5 2.5 0 0 1 5 0v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5a2.5 2.5 0 0 0 5 0V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z"/></svg>
       </button>
-      <!-- Direct Image/Video Gallery Icon -->
       <button class="dock-icon-btn" title="Photos & Videos" onclick="document.getElementById('mediaPicker').click()">
         <svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
       </button>
     </div>
-    <!-- Dynamic Mic / Send Button -->
     <button id="fabAction" class="action-fab" onclick="handleFabClick()" aria-label="Voice or Send">
       <svg id="iconMic" width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15a.998.998 0 0 0-.98-.85c-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08a6.993 6.993 0 0 0 5.91-5.78c.1-.6-.39-1.14-1-1.14z"/></svg>
       <svg id="iconSend" width="21" height="21" viewBox="0 0 24 24" fill="currentColor" style="display:none; margin-left:2px;"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
     </button>
+  </div>
+
+  <!-- Live Audio/Video Call Screen -->
+  <div id="callOverlay">
+    <div class="call-top-info">
+      <h3 id="callTitle" style="font-size:18px;">Voxa Call</h3>
+      <p id="callStateText" style="font-size:13px; color:#22c55e;">Connecting...</p>
+    </div>
+    <video id="remoteVideo" autoplay playsinline></video>
+    <video id="localVideo" autoplay muted playsinline></video>
+    <div class="call-controls">
+      <button id="btnMuteCall" class="call-btn" style="background:#334155;" onclick="toggleMuteCall()">🎙️</button>
+      <button class="call-btn" style="background:var(--danger);" onclick="endCall()">📵</button>
+    </div>
+  </div>
+
+  <!-- Master Access Passcode Gate -->
+  <div id="accessGateModal" class="overlay">
+    <div class="modal-card">
+      <h2>🔒 Private Access</h2>
+      <p>Enter your Master Access Passcode to unlock Voxa Chat.</p>
+      <div class="fld">
+        <input type="password" id="inpMasterPass" placeholder="Access Passcode" onkeydown="if(event.key==='Enter') verifyMasterAccess()" />
+      </div>
+      <button class="btn-save" onclick="verifyMasterAccess()">Unlock</button>
+    </div>
   </div>
 
   <!-- Pairing Modal -->
@@ -295,15 +344,23 @@
   </div>
 
 <script>
-  const CFG_KEY = 'voxa_chat_cfg_v3';
-  const DEV_KEY = 'voxa_dev_id_v3';
-  const TRUST_KEY = 'voxa_trusted_v3';
-  const MSG_KEY = 'voxa_text_msgs_v3';
+  // Change this Master Passcode anytime to control who can open the site
+  const MASTER_ACCESS_CODE = 'voxa2026';
+
+  const ACCESS_KEY = 'voxa_unlocked_v4';
+  const CFG_KEY = 'voxa_chat_cfg_v4';
+  const DEV_KEY = 'voxa_dev_id_v4';
+  const TRUST_KEY = 'voxa_trusted_v4';
+  const MSG_KEY = 'voxa_text_msgs_v4';
+  const LAST_DATE_KEY = 'voxa_last_open_date_v4';
+
   const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
-  const MAX_STORAGE_BYTES = 9.5 * 1024 * 1024; // Strict <10MB text limit
+  const MAX_STORAGE_BYTES = 9.5 * 1024 * 1024; // 10MB rolling cap
 
   let peer = null, activeConn = null, pendingConn = null, aesKey = null;
-  let dialInterval = null, recognition = null, isRecording = false;
+  let activeMediaCall = null, localStream = null, isMuted = false;
+  let dialInterval = null, recognition = null, isRecording = false, manualStopMic = false;
+  let baseTextBeforeMic = '';
   let selectedTextToCopy = '', selectedBubbleEl = null;
   let unsentQueue = [];
 
@@ -318,7 +375,6 @@
 
   let cfg = { room: '', pin: '', role: 'phone' };
 
-  // Tick SVGs (1: Single Grey, 2: Double Grey, 3: Double Blue/Green Seen)
   function getTickSvg(state) {
     if (state === 1) {
       return `<svg class="tick-svg" viewBox="0 0 16 11" fill="none"><path d="M11.5 1L4.8 9.2L1.5 6" stroke="#8696a0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -327,7 +383,6 @@
     return `<svg class="tick-svg" viewBox="0 0 18 11" fill="none"><path d="M11.5 1L4.8 9.2L1.5 6" stroke="${color}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M16.5 1L9.8 9.2L8.2 7.5" stroke="${color}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   }
 
-  // AES-GCM Encryption
   async function deriveKey(room, pin) {
     const enc = new TextEncoder();
     const mat = await crypto.subtle.importKey('raw', enc.encode(pin), 'PBKDF2', false, ['deriveKey']);
@@ -347,9 +402,41 @@
 
   window.addEventListener('DOMContentLoaded', () => {
     document.getElementById('devIdText').textContent = MY_DEV_ID;
+    runDailyRollingCleanup();
     restoreTextHistory();
-    setupSpeechRecognition();
+    setupContinuousVoiceTyping();
 
+    const params = new URLSearchParams(location.search);
+    // Allow auto-unlock if passed via trusted Android WebView URL param
+    if (params.get('key') === MASTER_ACCESS_CODE) {
+      localStorage.setItem(ACCESS_KEY, '1');
+    }
+
+    if (localStorage.getItem(ACCESS_KEY) !== '1') {
+      document.getElementById('accessGateModal').style.display = 'flex';
+      return;
+    }
+    bootAppAfterUnlock();
+  });
+
+  function verifyMasterAccess() {
+    const entered = document.getElementById('inpMasterPass').value.trim();
+    if (entered === MASTER_ACCESS_CODE) {
+      localStorage.setItem(ACCESS_KEY, '1');
+      document.getElementById('accessGateModal').style.display = 'none';
+      bootAppAfterUnlock();
+    } else {
+      alert('Incorrect Access Passcode');
+    }
+  }
+
+  function lockApp() {
+    closeMenus();
+    localStorage.removeItem(ACCESS_KEY);
+    location.reload();
+  }
+
+  function bootAppAfterUnlock() {
     const params = new URLSearchParams(location.search);
     const saved = JSON.parse(localStorage.getItem(CFG_KEY) || '{}');
     const autoRole = /Android|iPhone|iPad/i.test(navigator.userAgent) ? 'phone' : 'laptop';
@@ -368,18 +455,20 @@
     } else {
       document.getElementById('setupModal').style.display = 'flex';
     }
-  });
+  }
 
-  // Notify peer when user actually views the screen -> turns double ticks green/blue
+  // Stop continuous mic & send read receipt on tab/browser switch
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') sendReadReceipt();
+    if (document.visibilityState === 'hidden') {
+      stopVoiceTyping();
+    } else if (document.visibilityState === 'visible') {
+      sendReadReceipt();
+    }
   });
   window.addEventListener('focus', sendReadReceipt);
 
   function sendReadReceipt() {
-    if (activeConn && activeConn.open) {
-      activeConn.send({ type: 'seen_all' });
-    }
+    if (activeConn && activeConn.open) activeConn.send({ type: 'seen_all' });
   }
 
   function updateHeaderIdentity() {
@@ -392,13 +481,9 @@
     const dd = document.getElementById('topDropdown');
     dd.style.display = dd.style.display === 'block' ? 'none' : 'block';
   }
-  function closeMenus() {
-    document.getElementById('topDropdown').style.display = 'none';
-  }
-  function openPairingModal() {
-    closeMenus();
-    document.getElementById('setupModal').style.display = 'flex';
-  }
+  function closeMenus() { document.getElementById('topDropdown').style.display = 'none'; }
+  function openPairingModal() { closeMenus(); document.getElementById('setupModal').style.display = 'flex'; }
+
   function savePairing() {
     const room = document.getElementById('inpRoom').value.trim().toLowerCase().replace(/[^a-z0-9-_]/g, '');
     const pin = document.getElementById('inpPin').value.trim();
@@ -417,8 +502,8 @@
     if (peer) { try { peer.destroy(); } catch (_) {} peer = null; }
 
     aesKey = await deriveKey(cfg.room, cfg.pin);
-    const baseId = `vx3-${cfg.room}-${cfg.role}`;
-    const targetId = `vx3-${cfg.room}-${cfg.role === 'phone' ? 'laptop' : 'phone'}`;
+    const baseId = `vx4-${cfg.room}-${cfg.role}`;
+    const targetId = `vx4-${cfg.room}-${cfg.role === 'phone' ? 'laptop' : 'phone'}`;
     setOnlineUI(false, 'Connecting...');
     initPeer(baseId, targetId, false);
   }
@@ -450,6 +535,24 @@
         pendingConn = conn;
         document.getElementById('approvalDesc').textContent = `Allow device ${remoteDev} to connect?`;
         document.getElementById('approvalModal').style.display = 'flex';
+      }
+    });
+
+    // Incoming Audio/Video Call Handler
+    peer.on('call', async (incomingCall) => {
+      const wantVideo = incomingCall.metadata?.video !== false;
+      const accept = confirm(`Incoming ${wantVideo ? 'Video' : 'Audio'} Call from ${cfg.role === 'phone' ? 'Laptop' : 'Phone'}. Answer?`);
+      if (!accept) { incomingCall.close(); return; }
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: wantVideo });
+        document.getElementById('localVideo').srcObject = localStream;
+        document.getElementById('localVideo').style.display = wantVideo ? 'block' : 'none';
+        document.getElementById('callOverlay').style.display = 'flex';
+        document.getElementById('callStateText').textContent = 'Connected';
+        incomingCall.answer(localStream);
+        bindCallEvents(incomingCall);
+      } catch (e) {
+        alert('Camera/Mic permission required for calls.');
       }
     });
 
@@ -489,14 +592,8 @@
     });
 
     conn.on('data', async (pkt) => {
-      if (pkt.type === 'delivered') {
-        updateTickState(pkt.msgId, 2);
-        return;
-      }
-      if (pkt.type === 'seen_all') {
-        markAllOutgoingSeen();
-        return;
-      }
+      if (pkt.type === 'delivered') { updateTickState(pkt.msgId, 2); return; }
+      if (pkt.type === 'seen_all') { markAllOutgoingSeen(); return; }
 
       try {
         const plain = await decryptBuf(pkt.iv, pkt.data);
@@ -552,55 +649,123 @@
     sub.className = online ? 'peer-sub online' : 'peer-sub';
   }
 
-  // Dynamic Mic / Send Toggle
-  function updateFabIcon() {
-    const hasText = document.getElementById('msgInput').value.trim().length > 0;
-    document.getElementById('iconMic').style.display = hasText ? 'none' : 'block';
-    document.getElementById('iconSend').style.display = hasText ? 'block' : 'none';
-  }
+  // Audio / Video Call Controls
+  async function startCall(withVideo) {
+    if (!activeConn || !activeConn.open) return alert('Device is offline. Connect first to call.');
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: withVideo });
+      document.getElementById('localVideo').srcObject = localStream;
+      document.getElementById('localVideo').style.display = withVideo ? 'block' : 'none';
+      document.getElementById('callTitle').textContent = withVideo ? 'Video Call' : 'Voice Call';
+      document.getElementById('callStateText').textContent = 'Calling...';
+      document.getElementById('callOverlay').style.display = 'flex';
 
-  function handleFabClick() {
-    const val = document.getElementById('msgInput').value.trim();
-    if (val.length > 0) {
-      sendTextMessage();
-    } else {
-      toggleVoiceTyping();
+      const call = peer.call(activeConn.peer, localStream, { metadata: { video: withVideo } });
+      bindCallEvents(call);
+    } catch (e) {
+      alert('Allow camera/microphone access in browser settings.');
     }
   }
 
-  // Voice-to-Text (Fills input box so user can review & tap Send)
-  function setupSpeechRecognition() {
+  function bindCallEvents(call) {
+    activeMediaCall = call;
+    call.on('stream', (remoteStream) => {
+      document.getElementById('remoteVideo').srcObject = remoteStream;
+      document.getElementById('callStateText').textContent = 'Connected • E2EE';
+    });
+    call.on('close', endCall);
+    call.on('error', endCall);
+  }
+
+  function toggleMuteCall() {
+    if (!localStream) return;
+    isMuted = !isMuted;
+    localStream.getAudioTracks().forEach(t => t.enabled = !isMuted);
+    document.getElementById('btnMuteCall').textContent = isMuted ? '🔇' : '🎙️';
+  }
+
+  function endCall() {
+    if (activeMediaCall) { try { activeMediaCall.close(); } catch (_) {} activeMediaCall = null; }
+    if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+    document.getElementById('callOverlay').style.display = 'none';
+  }
+
+  // Continuous Voice-to-Text (Listens continuously until manually stopped or tab switched)
+  function updateFabIcon() {
+    const hasText = document.getElementById('msgInput').value.trim().length > 0;
+    // Show Mic if recording is active OR input is empty; show Send if text is ready & not recording
+    if (isRecording) {
+      document.getElementById('iconMic').style.display = 'block';
+      document.getElementById('iconSend').style.display = 'none';
+    } else {
+      document.getElementById('iconMic').style.display = hasText ? 'none' : 'block';
+      document.getElementById('iconSend').style.display = hasText ? 'block' : 'none';
+    }
+  }
+
+  function handleFabClick() {
+    if (isRecording) {
+      stopVoiceTyping();
+      return;
+    }
+    const val = document.getElementById('msgInput').value.trim();
+    if (val.length > 0) sendTextMessage();
+    else startVoiceTyping();
+  }
+
+  function setupContinuousVoiceTyping() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) return;
     recognition = new SR();
     recognition.lang = 'hi-IN';
+    recognition.continuous = true;
     recognition.interimResults = true;
 
     recognition.onstart = () => {
       isRecording = true;
       document.getElementById('fabAction').classList.add('recording');
-    };
-    recognition.onresult = (e) => {
-      let transcript = '';
-      for (let i = 0; i < e.results.length; i++) transcript += e.results[i][0].transcript;
-      document.getElementById('msgInput').value = transcript;
       updateFabIcon();
     };
+
+    recognition.onresult = (e) => {
+      let sessionTranscript = '';
+      for (let i = 0; i < e.results.length; i++) {
+        sessionTranscript += e.results[i][0].transcript;
+      }
+      const prefix = baseTextBeforeMic ? baseTextBeforeMic + ' ' : '';
+      document.getElementById('msgInput').value = (prefix + sessionTranscript).trim();
+    };
+
     recognition.onend = () => {
+      // Auto-restart if browser paused on silence & user hasn't manually stopped
+      if (!manualStopMic && document.visibilityState === 'visible') {
+        baseTextBeforeMic = document.getElementById('msgInput').value.trim();
+        try { recognition.start(); return; } catch (_) {}
+      }
       isRecording = false;
       document.getElementById('fabAction').classList.remove('recording');
       updateFabIcon();
     };
   }
 
-  function toggleVoiceTyping() {
-    if (!recognition) return alert('Voice typing not supported in this browser.');
-    if (isRecording) recognition.stop();
-    else recognition.start();
+  function startVoiceTyping() {
+    if (!recognition) return alert('Speech recognition not supported in this browser.');
+    manualStopMic = false;
+    baseTextBeforeMic = document.getElementById('msgInput').value.trim();
+    try { recognition.start(); } catch (_) {}
   }
 
-  // Send Text with Tick States (1 = Sent/Queued, 2 = Delivered, 3 = Seen)
+  function stopVoiceTyping() {
+    manualStopMic = true;
+    isRecording = false;
+    document.getElementById('fabAction').classList.remove('recording');
+    if (recognition) { try { recognition.stop(); } catch (_) {} }
+    updateFabIcon();
+  }
+
+  // Messaging & File Transfer
   async function sendTextMessage() {
+    stopVoiceTyping();
     const inp = document.getElementById('msgInput');
     const text = inp.value.trim();
     if (!text) return;
@@ -627,7 +792,6 @@
     }
   }
 
-  // File & Media Pickers
   document.getElementById('docPicker').addEventListener('change', handleFileSelect);
   document.getElementById('mediaPicker').addEventListener('change', handleFileSelect);
 
@@ -640,7 +804,6 @@
   async function sendFile(file) {
     const localUrl = URL.createObjectURL(file);
     const id = 'f-' + Date.now();
-    // Note: saveToStorage = false so media never bloats 10MB text storage
     renderBubble({ id, kind: 'file', name: file.name, size: file.size, mime: file.type, url: localUrl, dir: 'out', ts: Date.now(), tick: 1 }, false);
 
     if (!activeConn || !activeConn.open) return;
@@ -655,7 +818,6 @@
     await sendFile(new File([blob], name, { type: mime }));
   };
 
-  // Bubble Rendering + Long-Press Copy
   function renderBubble(msg, persistText) {
     const stream = document.getElementById('chatStream');
     const row = document.createElement('div');
@@ -669,7 +831,6 @@
       body.textContent = msg.text;
       bubble.appendChild(body);
 
-      // Long-press / Right-click to Copy
       let pressTimer;
       const triggerSelect = () => {
         cancelSelection();
@@ -719,9 +880,7 @@
     stream.appendChild(row);
     stream.scrollTop = stream.scrollHeight;
 
-    if (persistText && msg.kind === 'text') {
-      saveTextTo30DayCache(msg);
-    }
+    if (persistText && msg.kind === 'text') saveTextRolling(msg);
   }
 
   function updateTickState(msgId, newState) {
@@ -745,7 +904,6 @@
     localStorage.setItem(MSG_KEY, JSON.stringify(list));
   }
 
-  // Long-press Copy Helpers
   function cancelSelection() {
     if (selectedBubbleEl) selectedBubbleEl.classList.remove('selected');
     selectedBubbleEl = null;
@@ -757,16 +915,42 @@
     cancelSelection();
   }
 
-  // 30-Day Local Storage (Text Only, Strictly Under 10MB)
-  function saveTextTo30DayCache(msg) {
+  // Daily Date-Change Check + 30-Day + 10MB Rolling Storage Engine
+  function runDailyRollingCleanup() {
+    const todayStr = new Date().toDateString();
+    const lastDate = localStorage.getItem(LAST_DATE_KEY);
+    let list = JSON.parse(localStorage.getItem(MSG_KEY) || '[]');
+    const cutoff = Date.now() - THIRTY_DAYS;
+    list = list.filter(m => m.ts >= cutoff);
+
+    // If date changed since yesterday & storage is heavy (>8MB), trim oldest day's messages first
+    if (lastDate && lastDate !== todayStr && JSON.stringify(list).length > 8 * 1024 * 1024 && list.length > 0) {
+      const oldestDay = new Date(list[0].ts).toDateString();
+      list = list.filter(m => new Date(m.ts).toDateString() !== oldestDay);
+    }
+    localStorage.setItem(LAST_DATE_KEY, todayStr);
+    enforce10MbRollingCap(list);
+  }
+
+  function saveTextRolling(msg) {
     let list = JSON.parse(localStorage.getItem(MSG_KEY) || '[]');
     const cutoff = Date.now() - THIRTY_DAYS;
     list = list.filter(m => m.ts >= cutoff);
     list.push({ id: msg.id, kind: 'text', text: msg.text, dir: msg.dir, ts: msg.ts, tick: msg.tick || 1 });
+    enforce10MbRollingCap(list);
+  }
 
+  function enforce10MbRollingCap(list) {
     let serialized = JSON.stringify(list);
     while (serialized.length > MAX_STORAGE_BYTES && list.length > 1) {
-      list.shift();
+      // Remove oldest day batch if possible, else oldest message
+      const oldestDay = new Date(list[0].ts).toDateString();
+      const filteredDay = list.filter(m => new Date(m.ts).toDateString() !== oldestDay);
+      if (filteredDay.length > 0 && filteredDay.length < list.length) {
+        list = filteredDay;
+      } else {
+        list.shift();
+      }
       serialized = JSON.stringify(list);
     }
     localStorage.setItem(MSG_KEY, serialized);
@@ -779,9 +963,7 @@
   }
 
   function restoreTextHistory() {
-    const cutoff = Date.now() - THIRTY_DAYS;
-    let list = JSON.parse(localStorage.getItem(MSG_KEY) || '[]').filter(m => m.ts >= cutoff);
-    localStorage.setItem(MSG_KEY, JSON.stringify(list));
+    const list = JSON.parse(localStorage.getItem(MSG_KEY) || '[]');
     list.forEach(m => renderBubble(m, false));
   }
 
@@ -789,7 +971,7 @@
     closeMenus();
     localStorage.removeItem(MSG_KEY);
     document.getElementById('chatStream').innerHTML =
-      '<div class="e2ee-pill">🔒 End-to-end encrypted. Chats stay locally for 30 days.</div>';
+      '<div class="e2ee-pill">🔒 End-to-end encrypted. Chats auto-roll at 30 days or 10MB.</div>';
   }
 
   function formatBytes(b) {
