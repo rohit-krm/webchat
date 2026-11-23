@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Voxa Bridge • E2EE P2P Transfer</title>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <style>
+    :root {
+      --bg: #0b141a;
+      --header: #1f2c34;
+      --panel: #111b21;
+      --bubble-out: #005c4b;
+      --bubble-in: #202c33;
+      --accent: #00a884;
+      --text: #e9edef;
+      --muted: #8696a0;
+      --danger: #ef4444;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background: var(--bg); color: var(--text); height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+
+    /* Top Header */
+    header {
+      background: var(--header);
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      z-index: 10;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .shield {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: rgba(0, 168, 132, 0.18); color: var(--accent);
+      display: grid; place-items: center; font-weight: bold; font-size: 16px;
+    }
+    .brand h1 { font-size: 15px; font-weight: 600; }
+    .status { font-size: 11.5px; color: var(--muted); display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #f59e0b; }
+    .dot.online { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+    .dot.locked { background: var(--danger); }
+
+    .header-actions { display: flex; gap: 6px; }
+    .btn-sm {
+      background: rgba(255,255,255,0.08); color: var(--text); border: none;
+      padding: 6px 10px; border-radius: 8px; font-size: 12px; cursor: pointer;
+    }
+    .btn-sm:hover { background: rgba(255,255,255,0.14); }
+
+    /* Pairing Setup Card */
+    #setupOverlay {
+      position: fixed; inset: 0; background: rgba(11, 20, 26, 0.96);
+      display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 50;
+    }
+    .setup-card {
+      background: var(--header); width: 100%; max-width: 390px;
+      padding: 22px; border-radius: 18px; border: 1px solid rgba(255,255,255,0.08);
+    }
+    .setup-card h2 { font-size: 18px; margin-bottom: 6px; }
+    .setup-card p { font-size: 12.5px; color: var(--muted); margin-bottom: 16px; line-height: 1.4; }
+    .field { margin-bottom: 12px; }
+    .field label { display: block; font-size: 11.5px; color: var(--muted); margin-bottom: 5px; }
+    .field input, .field select {
+      width: 100%; padding: 11px 12px; border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.12); background: var(--bg);
+      color: var(--text); font-size: 14px; outline: none;
+    }
+    .btn-primary {
+      width: 100%; padding: 12px; border-radius: 12px; border: none;
+      background: var(--accent); color: #061410; font-weight: 700;
+      font-size: 14px; cursor: pointer; margin-top: 6px;
+    }
+
+    /* Approval Modal */
+    #approvalModal {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.78);
+      display: none; align-items: center; justify-content: center; padding: 16px; z-index: 60;
+    }
+    .modal-box {
+      background: var(--header); padding: 20px; border-radius: 16px;
+      max-width: 340px; width: 100%; text-align: center;
+      border: 1px solid var(--accent);
+    }
+    .modal-actions { display: flex; gap: 10px; margin-top: 16px; }
+    .modal-actions button { flex: 1; padding: 10px; border-radius: 10px; border: none; font-weight: 600; cursor: pointer; }
+
+    /* Chat Area (WhatsApp Style) */
+    #chatList {
+      flex: 1; overflow-y: auto; padding: 14px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .sys-note {
+      align-self: center; background: rgba(31, 44, 52, 0.85); color: #ffd279;
+      font-size: 11.5px; padding: 6px 12px; border-radius: 10px; text-align: center; max-width: 88%;
+    }
+    .bubble {
+      max-width: 82%; padding: 9px 12px; border-radius: 14px;
+      font-size: 14.5px; line-height: 1.42; word-wrap: break-word; position: relative;
+    }
+    .bubble.out { align-self: flex-end; background: var(--bubble-out); border-bottom-right-radius: 4px; }
+    .bubble.in { align-self: flex-start; background: var(--bubble-in); border-bottom-left-radius: 4px; }
+    .bubble img { max-width: 100%; max-height: 220px; border-radius: 10px; margin-top: 6px; display: block; }
+    .file-card {
+      background: rgba(0,0,0,0.25); padding: 10px; border-radius: 10px;
+      margin-top: 4px; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    }
+    .file-info { overflow: hidden; }
+    .file-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .file-size { font-size: 11px; color: var(--muted); }
+    .bubble-footer {
+      display: flex; align-items: center; justify-content: flex-end; gap: 8px;
+      margin-top: 5px; font-size: 10.5px; color: rgba(255,255,255,0.65);
+    }
+    .mini-act {
+      background: rgba(255,255,255,0.12); color: #fff; border: none;
+      padding: 3px 8px; border-radius: 6px; font-size: 11px; cursor: pointer;
+    }
+
+    /* Bottom Composer */
+    .composer {
+      background: var(--panel); padding: 8px 10px;
+      display: flex; align-items: center; gap: 8px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+    }
+    .attach-btn {
+      width: 42px; height: 42px; border-radius: 50%; border: none;
+      background: var(--header); color: var(--accent); font-size: 18px; cursor: pointer; flex-shrink: 0;
+    }
+    #msgInput {
+      flex: 1; background: var(--header); border: none; color: var(--text);
+      padding: 11px 14px; border-radius: 22px; font-size: 14.5px; outline: none;
+    }
+    .send-btn {
+      width: 44px; height: 44px; border-radius: 50%; border: none;
+      background: var(--accent); color: #061410; font-size: 17px; font-weight: bold; cursor: pointer; flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <div class="shield">🔒</div>
+      <div>
+        <h1>Voxa E2EE Bridge</h1>
+        <div class="status"><span id="statusDot" class="dot"></span><span id="statusText">Not Paired</span></div>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="btn-sm" onclick="clearLocalChat()">Clear</button>
+      <button class="btn-sm" onclick="openSetup()">Room ID</button>
+    </div>
+  </header>
+
+  <div id="chatList">
+    <div class="sys-note">🛡️ End-to-End Encrypted (AES-256 + WebRTC). Zero server storage. Safe on Hostel Wi-Fi.</div>
+  </div>
+
+  <div class="composer">
+    <input type="file" id="filePicker" multiple hidden />
+    <button class="attach-btn" title="Attach Photos/PDF" onclick="document.getElementById('filePicker').click()">📎</button>
+    <input type="text" id="msgInput" placeholder="Type text or paste link..." onkeydown="if(event.key==='Enter') sendTextMessage()" />
+    <button class="send-btn" onclick="sendTextMessage()">➤</button>
+  </div>
+
+  <!-- Setup Overlay -->
+  <div id="setupOverlay">
+    <div class="setup-card">
+      <h2>🔐 Secure Device Pairing</h2>
+      <p>Enter the exact same Room ID &amp; Secret Passcode on both your Phone and Laptop.</p>
+      <div class="field">
+        <label>Permanent Room ID</label>
+        <input type="text" id="inpRoom" placeholder="e.g. rohit-cmf-99" />
+      </div>
+      <div class="field">
+        <label>Secret Passcode (AES Encryption Key)</label>
+        <input type="password" id="inpPin" placeholder="Min 6 characters (e.g. 987654)" />
+      </div>
+      <div class="field">
+        <label>This Device Role</label>
+        <select id="inpRole">
+          <option value="phone">📱 Phone (Host)</option>
+          <option value="laptop">💻 Laptop (Client)</option>
+        </select>
+      </div>
+      <button class="btn-primary" onclick="saveAndConnect()">Connect Encrypted Tunnel</button>
+    </div>
+  </div>
+
+  <!-- Connection Approval Popup -->
+  <div id="approvalModal">
+    <div class="modal-box">
+      <h3 style="margin-bottom:8px;">⚠️ Device Connection Request</h3>
+      <p id="approvalDesc" style="font-size:13px; color:var(--muted);">A device is trying to connect to your secure room.</p>
+      <div class="modal-actions">
+        <button style="background:var(--danger); color:#fff;" onclick="respondApproval(false)">Block</button>
+        <button style="background:var(--accent); color:#061410;" onclick="respondApproval(true)">Allow</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  let peer = null;
+  let activeConn = null;
+  let pendingConn = null;
+  let cryptoKey = null;
+  let cfg = { room: '', pin: '', role: 'phone' };
+
+  const STORAGE_KEY = 'voxa_bridge_session_v1';
+  const CFG_KEY = 'voxa_bridge_cfg_v1';
+
+  // 1. Derive AES-GCM 256-bit key from Room + Passcode
+  async function deriveAesKey(room, pin) {
+    const enc = new TextEncoder();
+    const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(pin), 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey(
+      { name: 'PBKDF2', salt: enc.encode('voxa-salt-' + room), iterations: 100000, hash: 'SHA-256' },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt']
+    );
+  }
+
+  async function encryptBuffer(arrayBuffer) {
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, cryptoKey, arrayBuffer);
+    return { iv: Array.from(iv), data: cipher };
+  }
+
+  async function decryptBuffer(ivArr, cipherBuffer) {
+    const iv = new Uint8Array(ivArr);
+    return crypto.subtle.decrypt({ name: 'AES-GCM', iv }, cryptoKey, cipherBuffer);
+  }
+
+  // 2. Initialize from URL params (for Android WebView) or LocalStorage
+  window.addEventListener('DOMContentLoaded', () => {
+    restoreLocalChat();
+    const params = new URLSearchParams(location.search);
+    const saved = JSON.parse(localStorage.getItem(CFG_KEY) || '{}');
+
+    cfg.room = (params.get('room') || saved.room || '').trim().toLowerCase();
+    cfg.pin = (params.get('pin') || saved.pin || '').trim();
+    cfg.role = params.get('role') || saved.role || (/Android|iPhone/i.test(navigator.userAgent) ? 'phone' : 'laptop');
+
+    document.getElementById('inpRoom').value = cfg.room;
+    document.getElementById('inpPin').value = cfg.pin;
+    document.getElementById('inpRole').value = cfg.role;
+
+    if (cfg.room && cfg.pin.length >= 4) {
+      document.getElementById('setupOverlay').style.display = 'none';
+      initPeerBridge();
+    }
+  });
+
+  function openSetup() {
+    document.getElementById('setupOverlay').style.display = 'flex';
+  }
+
+  function saveAndConnect() {
+    const room = document.getElementById('inpRoom').value.trim().toLowerCase().replace(/[^a-z0-9-_]/g, '');
+    const pin = document.getElementById('inpPin').value.trim();
+    const role = document.getElementById('inpRole').value;
+    if (!room || pin.length < 4) {
+      alert('Enter a valid Room ID and at least 4-character Passcode.');
+      return;
+    }
+    cfg = { room, pin, role };
+    localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
+    document.getElementById('setupOverlay').style.display = 'none';
+    initPeerBridge();
+  }
+
+  async function initPeerBridge() {
+    if (peer) { try { peer.destroy(); } catch (_) {} }
+    cryptoKey = await deriveAesKey(cfg.room, cfg.pin);
+
+    const myPeerId = `voxa-${cfg.room}-${cfg.role}`;
+    const targetPeerId = `voxa-${cfg.room}-${cfg.role === 'phone' ? 'laptop' : 'phone'}`;
+
+    setStatus('Connecting...', false);
+    peer = new Peer(myPeerId, { debug: 0 });
+
+    peer.on('open', () => {
+      setStatus(`Waiting for ${cfg.role === 'phone' ? 'Laptop' : 'Phone'}...`, false);
+      if (cfg.role === 'laptop') {
+        connectToTarget(targetPeerId);
+      }
+    });
+
+    // Strict 2-Peer Lock + 1-Time Approval Pop-up
+    peer.on('connection', (conn) => {
+      if (activeConn && activeConn.open) {
+        conn.close(); // Block any 3rd device on Hostel Wi-Fi
+        return;
+      }
+      pendingConn = conn;
+      document.getElementById('approvalDesc').textContent =
+        `Device (${conn.peer}) wants to join room "${cfg.room}". Allow?`;
+      document.getElementById('approvalModal').style.display = 'flex';
+    });
+
+    peer.on('error', (err) => {
+      if (err.type === 'peer-unavailable' && cfg.role === 'laptop') {
+        setStatus('Phone offline • Retrying in 4s...', false);
+        setTimeout(() => connectToTarget(targetPeerId), 4000);
+      } else {
+        setStatus('Network idle • Tap Room ID to retry', false);
+      }
+    });
+  }
+
+  function respondApproval(allowed) {
+    document.getElementById('approvalModal').style.display = 'none';
+    if (!pendingConn) return;
+    if (!allowed) {
+      pendingConn.close();
+      pendingConn = null;
+      addSysNote('🚫 Blocked an unauthorized connection attempt.');
+      return;
+    }
+    setupDataChannel(pendingConn);
+    pendingConn = null;
+  }
+
+  function connectToTarget(targetId) {
+    if (activeConn && activeConn.open) return;
+    const conn = peer.connect(targetId, { reliable: true });
+    setupDataChannel(conn);
+  }
+
+  function setupDataChannel(conn) {
+    activeConn = conn;
+    conn.on('open', () => {
+      setStatus('Connected • AES-256 Encrypted', true);
+      addSysNote(`✅ Secure tunnel established with ${cfg.role === 'phone' ? 'Laptop' : 'Phone'}.`);
+    });
+
+    conn.on('data', async (packet) => {
+      try {
+        const plainBuf = await decryptBuffer(packet.iv, packet.data);
+        if (packet.kind === 'text') {
+          const text = new TextDecoder().decode(plainBuf);
+          renderMessage({ kind: 'text', text, dir: 'in', time: nowTime() }, true);
+        } else if (packet.kind === 'file') {
+          const blob = new Blob([plainBuf], { type: packet.mime });
+          const url = URL.createObjectURL(blob);
+          renderMessage({ kind: 'file', name: packet.name, size: packet.size, mime: packet.mime, url, dir: 'in', time: nowTime() }, false);
+        }
+      } catch (e) {
+        addSysNote('⚠️ Decryption failed: Passcode mismatch between devices!');
+      }
+    });
+
+    conn.on('close', () => {
+      setStatus('Disconnected • Waiting...', false);
+      activeConn = null;
+    });
+  }
+
+  // 3. Send Text
+  async function sendTextMessage() {
+    const inp = document.getElementById('msgInput');
+    const text = inp.value.trim();
+    if (!text) return;
+    inp.value = '';
+
+    renderMessage({ kind: 'text', text, dir: 'out', time: nowTime() }, true);
+    if (!activeConn || !activeConn.open) {
+      addSysNote('⚠️ Peer not connected yet. Open same Room ID on other device.');
+      return;
+    }
+    const enc = await encryptBuffer(new TextEncoder().encode(text));
+    activeConn.send({ kind: 'text', iv: enc.iv, data: enc.data });
+  }
+
+  // 4. Send Multiple Files (Photos / PDFs / Videos up to ~200MB)
+  document.getElementById('filePicker').addEventListener('change', async (e) => {
+    const files = Array.from(e.target.files || []);
+    for (const file of files) {
+      await sendFileObject(file);
+    }
+    e.target.value = '';
+  });
+
+  async function sendFileObject(file) {
+    const localUrl = URL.createObjectURL(file);
+    renderMessage({ kind: 'file', name: file.name, size: file.size, mime: file.type, url: localUrl, dir: 'out', time: nowTime() }, false);
+
+    if (!activeConn || !activeConn.open) {
+      addSysNote('⚠️ Peer offline: Connect Laptop first to transfer files.');
+      return;
+    }
+    const buf = await file.arrayBuffer();
+    const enc = await encryptBuffer(buf);
+    activeConn.send({
+      kind: 'file',
+      name: file.name,
+      size: file.size,
+      mime: file.type || 'application/octet-stream',
+      iv: enc.iv,
+      data: enc.data
+    });
+  }
+
+  // 5. Hook for Voxa Android App Direct Push (Base64 -> File)
+  window.receiveFileFromAndroid = async function(base64Data, fileName, mimeType) {
+    const res = await fetch(`data:${mimeType};base64,${base64Data}`);
+    const blob = await res.blob();
+    const file = new File([blob], fileName, { type: mimeType });
+    await sendFileObject(file);
+  };
+
+  // 6. UI Rendering & Local Session Persistence
+  function renderMessage(msg, persist) {
+    const list = document.getElementById('chatList');
+    const div = document.createElement('div');
+    div.className = `bubble ${msg.dir}`;
+
+    if (msg.kind === 'text') {
+      const p = document.createElement('div');
+      p.textContent = msg.text;
+      div.appendChild(p);
+
+      const footer = document.createElement('div');
+      footer.className = 'bubble-footer';
+      footer.innerHTML = `<button class="mini-act" onclick="copyText(this)">Copy</button><span>${msg.time}</span>`;
+      footer.dataset.copy = msg.text;
+      div.appendChild(footer);
+    } else {
+      const isImg = (msg.mime || '').startsWith('image/');
+      if (isImg) {
+        const img = document.createElement('img');
+        img.src = msg.url;
+        div.appendChild(img);
+      }
+      const card = document.createElement('div');
+      card.className = 'file-card';
+      card.innerHTML = `
+        <div class="file-info">
+          <div class="file-name">${escapeHtml(msg.name)}</div>
+          <div class="file-size">${formatBytes(msg.size)}</div>
+        </div>
+        <a class="mini-act" style="text-decoration:none;" href="${msg.url}" download="${escapeHtml(msg.name)}">⬇ Save</a>
+      `;
+      div.appendChild(card);
+
+      const footer = document.createElement('div');
+      footer.className = 'bubble-footer';
+      footer.innerHTML = `<span>${msg.time}</span>`;
+      div.appendChild(footer);
+    }
+
+    list.appendChild(div);
+    list.scrollTop = list.scrollHeight;
+
+    if (persist) {
+      const hist = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+      hist.push(msg);
+      if (hist.length > 60) hist.shift();
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(hist));
+    }
+  }
+
+  function restoreLocalChat() {
+    const hist = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    hist.forEach(m => renderMessage(m, false));
+  }
+
+  function clearLocalChat() {
+    localStorage.removeItem(STORAGE_KEY);
+    document.getElementById('chatList').innerHTML =
+      '<div class="sys-note">🧹 Chat cleared locally.</div>';
+  }
+
+  function copyText(btn) {
+    const txt = btn.parentElement.dataset.copy;
+    navigator.clipboard.writeText(txt);
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = 'Copy', 1500);
+  }
+
+  function addSysNote(txt) {
+    const list = document.getElementById('chatList');
+    const d = document.createElement('div');
+    d.className = 'sys-note';
+    d.textContent = txt;
+    list.appendChild(d);
+    list.scrollTop = list.scrollHeight;
+  }
+
+  function setStatus(text, isOnline) {
+    document.getElementById('statusText').textContent = text;
+    const dot = document.getElementById('statusDot');
+    dot.className = isOnline ? 'dot online' : 'dot';
+  }
+
+  function nowTime() {
+    return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function formatBytes(b) {
+    if (!b) return '0 B';
+    const k = 1024, sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(b) / Math.log(k));
+    return (b / Math.pow(k, i)).toFixed(1) + ' ' + sizes[i];
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  }
+</script>
+</body>
+</html>
