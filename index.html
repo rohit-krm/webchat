@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Voxa Chat</title>
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#1f2c34" />
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <style>
     :root {
@@ -353,6 +355,7 @@
     </div>
 
     <div id="topDropdown" class="dropdown" onclick="event.stopPropagation()">
+      <button onclick="copyMagicLink()">Copy Magic Login Link</button>
       <button onclick="openPairingModal()">Pairing Settings</button>
       <button onclick="clearChatHistory()">Clear Chat</button>
       <button onclick="lockApp()">Lock App</button>
@@ -1216,6 +1219,19 @@
   }
   function escapeHtml(s) {
     return s.replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  }
+
+  // Register PWA Service Worker for 1-Tap Install on Phone & Laptop
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  }
+
+  // Copy 1-Click Auto-Login URL (No typing needed on any new browser)
+  function copyMagicLink() {
+    closeMenus();
+    const magicUrl = `${location.origin}/?key=${encodeURIComponent(MASTER_ACCESS_CODE)}&room=${encodeURIComponent(cfg.room)}&pin=${encodeURIComponent(cfg.pin)}`;
+    navigator.clipboard.writeText(magicUrl);
+    alert('Magic Login Link copied! किसी भी नए ब्राउज़र में इसे पेस्ट करें—बिना कुछ टाइप किए सीधे कनेक्ट हो जाएगा।');
   }
 </script>
 </body>
