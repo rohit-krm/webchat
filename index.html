@@ -651,20 +651,26 @@
 
   // Audio / Video Call Controls
   async function startCall(withVideo) {
-    if (!activeConn || !activeConn.open) return alert('Device is offline. Connect first to call.');
+    if (!activeConn || !activeConn.open) return alert('Device offline hai. Pehle connect karein.');
     try {
       localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: withVideo });
-      document.getElementById('localVideo').srcObject = localStream;
-      document.getElementById('localVideo').style.display = withVideo ? 'block' : 'none';
-      document.getElementById('callTitle').textContent = withVideo ? 'Video Call' : 'Voice Call';
-      document.getElementById('callStateText').textContent = 'Calling...';
-      document.getElementById('callOverlay').style.display = 'flex';
-
-      const call = peer.call(activeConn.peer, localStream, { metadata: { video: withVideo } });
-      bindCallEvents(call);
-    } catch (e) {
-      alert('Allow camera/microphone access in browser settings.');
+    } catch (err) {
+      if (withVideo) {
+        // Fallback to audio-only if camera is missing/busy
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        withVideo = false;
+      } else {
+        return alert('Mic permission allow karein: ' + err.name);
+      }
     }
+    document.getElementById('localVideo').srcObject = localStream;
+    document.getElementById('localVideo').style.display = withVideo ? 'block' : 'none';
+    document.getElementById('callTitle').textContent = withVideo ? 'Video Call' : 'Voice Call';
+    document.getElementById('callStateText').textContent = 'Calling...';
+    document.getElementById('callOverlay').style.display = 'flex';
+
+    const call = peer.call(activeConn.peer, localStream, { metadata: { video: withVideo } });
+    bindCallEvents(call);
   }
 
   function bindCallEvents(call) {
@@ -713,7 +719,7 @@
     else startVoiceTyping();
   }
 
-  function setupContinuousVoiceTyping() {
+ function setupContinuousVoiceTyping() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) return;
     recognition = new SR();
@@ -728,18 +734,28 @@
     };
 
     recognition.onresult = (e) => {
-      let sessionTranscript = '';
-      for (let i = 0; i < e.results.length; i++) {
-        sessionTranscript += e.results[i][0].transcript;
+      let finalChunk = '';
+      let interimChunk = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const txt = e.results[i][0].transcript;
+        if (e.results[i].isFinal) finalChunk += txt + ' ';
+        else interimChunk += txt;
       }
-      const prefix = baseTextBeforeMic ? baseTextBeforeMic + ' ' : '';
-      document.getElementById('msgInput').value = (prefix + sessionTranscript).trim();
+      if (finalChunk) {
+        baseTextBeforeMic = (baseTextBeforeMic + ' ' + finalChunk).trim();
+      }
+      document.getElementById('msgInput').value = (baseTextBeforeMic + ' ' + interimChunk).trim();
+    };
+
+    recognition.onerror = (e) => {
+      if (e.error === 'not-allowed') {
+        alert('Browser address bar ke lock icon se Microphone Allow karein.');
+        manualStopMic = true;
+      }
     };
 
     recognition.onend = () => {
-      // Auto-restart if browser paused on silence & user hasn't manually stopped
       if (!manualStopMic && document.visibilityState === 'visible') {
-        baseTextBeforeMic = document.getElementById('msgInput').value.trim();
         try { recognition.start(); return; } catch (_) {}
       }
       isRecording = false;
