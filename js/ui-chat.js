@@ -54,53 +54,63 @@ export function renderContactList(onlineSet, onOpenChat) {
   });
 }
 
-// Copy 1 photo directly OR stitch multiple selected photos onto a high-res PNG grid for 1-click clipboard copy
+// Copy each photo INDIVIDUALLY at 100% full quality into OS Clipboard History (Win+V / Android Clipboard)
 export async function copyImagesToClipboard(imageRecords) {
   if (!imageRecords.length) return;
   try {
-    const bitmaps = await Promise.all(
-      imageRecords.map(async (rec) => {
-        const blob = rec.blob || (await (await fetch(rec.url)).blob());
-        return createImageBitmap(blob);
-      })
-    );
+    let copied = 0;
+    for (let i = 0; i < imageRecords.length; i++) {
+      const rec = imageRecords[i];
+      const blob = rec.blob || (await (await fetch(rec.url || rec._objectUrl)).blob());
+      const bmp = await createImageBitmap(blob);
 
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
+      const canvas = document.createElement('canvas');
+      canvas.width = bmp.width;
+      canvas.height = bmp.height;
+      canvas.getContext('2d').drawImage(bmp, 0, 0);
 
-    if (bitmaps.length === 1) {
-      canvas.width = bitmaps[0].width;
-      canvas.height = bitmaps[0].height;
-      ctx.drawImage(bitmaps[0], 0, 0);
-    } else {
-      const cols = Math.min(2, bitmaps.length);
-      const rows = Math.ceil(bitmaps.length / cols);
-      const tileW = 640;
-      const tileH = 640;
-      const gap = 12;
-      canvas.width = cols * tileW + (cols - 1) * gap;
-      canvas.height = rows * tileH + (rows - 1) * gap;
-      ctx.fillStyle = '#0b141a';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const pngBlob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
+      copied++;
 
-      bitmaps.forEach((bmp, idx) => {
-        const r = Math.floor(idx / cols);
-        const c = idx % cols;
-        const x = c * (tileW + gap);
-        const y = r * (tileH + gap);
-        const scale = Math.min(tileW / bmp.width, tileH / bmp.height);
-        const dw = bmp.width * scale;
-        const dh = bmp.height * scale;
-        ctx.drawImage(bmp, x + (tileW - dw) / 2, y + (tileH - dh) / 2, dw, dh);
-      });
+      if (i < imageRecords.length - 1) {
+        await new Promise((r) => setTimeout(r, 380));
+      }
     }
-
-    const pngBlob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
-    await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
-    showToast(bitmaps.length > 1 ? `Copied ${bitmaps.length} photos to clipboard!` : 'Photo copied!');
+    showToast(
+      copied > 1
+        ? `${copied} full-quality photos copied individually to Clipboard History!`
+        : 'Full-quality photo copied!'
+    );
   } catch (_) {
-    showToast('Clipboard copy blocked on this browser');
+    showToast('Clipboard permission blocked on this browser');
   }
+}
+
+// Extract real first frame from video blob/url so video thumbnail renders cleanly
+function generateVideoThumbnail(videoUrl, imgElement) {
+  const tempVid = document.createElement('video');
+  tempVid.src = videoUrl;
+  tempVid.muted = true;
+  tempVid.playsInline = true;
+  tempVid.preload = 'auto';
+
+  tempVid.onloadeddata = () => {
+    try {
+      tempVid.currentTime = Math.min(0.4, (tempVid.duration || 1) / 2);
+    } catch (_) {}
+  };
+
+  tempVid.onseeked = () => {
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = tempVid.videoWidth || 320;
+      canvas.height = tempVid.videoHeight || 320;
+      canvas.getContext('2d').drawImage(tempVid, 0, 0, canvas.width, canvas.height);
+      imgElement.src = canvas.toDataURL('image/jpeg', 0.82);
+    } catch (_) {}
+    tempVid.src = '';
+  };
 }
 
 export function appendBubbleToStream(msg, handlers) {
@@ -120,7 +130,6 @@ export function appendBubbleToStream(msg, handlers) {
     txt.textContent = msg.text;
     bubble.appendChild(txt);
   } else if (isPhoto || isVideo) {
-    // Clean 1:1 Square Media Card — NO filename, size + Copy/Download icons on bottom bar
     bubble.classList.add('media-bubble');
     const url = msg.blob ? URL.createObjectURL(msg.blob) : msg.url;
     msg._objectUrl = url;
@@ -134,15 +143,14 @@ export function appendBubbleToStream(msg, handlers) {
       img.loading = 'lazy';
       card.appendChild(img);
     } else {
-      const vid = document.createElement('video');
-      vid.src = url;
-      vid.muted = true;
-      vid.preload = 'metadata';
-      card.appendChild(vid);
+      const thumbImg = document.createElement('img');
+      thumbImg.alt = 'Video';
+      card.appendChild(thumbImg);
+      generateVideoThumbnail(url, thumbImg);
 
       const playBadge = document.createElement('div');
       playBadge.className = 'video-center-play';
-      playBadge.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="margin-left:2px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
+      playBadge.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-left:2px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
       card.appendChild(playBadge);
     }
 
@@ -156,7 +164,7 @@ export function appendBubbleToStream(msg, handlers) {
     if (isPhoto) {
       const copyBtn = document.createElement('button');
       copyBtn.className = 'media-mini-btn';
-      copyBtn.title = 'Copy Photo';
+      copyBtn.title = 'Copy Full-Quality Photo';
       copyBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
       copyBtn.onclick = (e) => {
         e.stopPropagation();
@@ -180,7 +188,6 @@ export function appendBubbleToStream(msg, handlers) {
     card.appendChild(bottomBar);
     bubble.appendChild(card);
   } else {
-    // Document / PDF / APK card
     const url = msg.blob ? URL.createObjectURL(msg.blob) : msg.url;
     const ext = (msg.name.split('.').pop() || 'FILE').toUpperCase().slice(0, 4);
     const doc = document.createElement('div');
@@ -198,7 +205,6 @@ export function appendBubbleToStream(msg, handlers) {
     bubble.appendChild(doc);
   }
 
-  // Selection Checkmark Badge
   const checkBadge = document.createElement('div');
   checkBadge.className = 'select-check-badge hidden';
   checkBadge.textContent = '✓';
@@ -210,7 +216,6 @@ export function appendBubbleToStream(msg, handlers) {
   meta.innerHTML = `<span>${timeStr}</span>` + (msg.dir === 'out' ? `<span id="tick-${msg.id}" class="msg-tick" data-state="${msg.tick || 1}">${getTickSvg(msg.tick || 1)}</span>` : '');
   bubble.appendChild(meta);
 
-  // Long-Press (Hold) to Enter Multi-Select; Tap to Expand or Toggle Selection
   let pressTimer = null;
   let didLongPress = false;
 
