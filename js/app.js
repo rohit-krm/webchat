@@ -6,7 +6,8 @@ import {
 } from './storage.js';
 import { VoxaRtcEngine, getMyDeviceId } from './crypto-rtc.js';
 import {
-  showToast, renderContactList, appendBubbleToStream, setBubbleTickUI, formatBytes
+  showToast, renderContactList, appendBubbleToStream, setBubbleTickUI,
+  formatBytes, copyImagesToClipboard
 } from './ui-chat.js';
 
 const MASTER_ACCESS_CODE = 'voxa2026';
@@ -14,15 +15,22 @@ const UNLOCK_KEY = 'voxa_unlocked_modular_v1';
 
 let rtc = null;
 let activePeerId = null;
+let isDirectSingleChatMode = false;
 const onlinePeers = new Set();
-const unreadIncomingIds = new Map(); // peerId -> Set<msgId>
+const unreadIncomingIds = new Map();
 
-// Continuous Voice Mic state
+// Multi-Select State (Supports multiple photos and/or text messages)
+const selectedRecords = new Map(); // msgId -> { msg, bubbleEl, checkEl }
+
+// Lightbox State
+let lightboxCurrentMsg = null;
+
+// Continuous Voice Mic State
 let recognition = null, isListening = false, manualStop = false, voiceBuffer = '';
-let selectedCopyText = '', selectedBubble = null;
 
-// Call state
-let activeCall = null, incomingCall = null, localStream = null, isMuted = false, ringTimer = null, audioCtx = null;
+// Call State & Timer
+let activeCall = null, incomingCall = null, localStream = null;
+let isMuted = false, isCamOff = false, ringTimer = null, callDurationTimer = null, callSeconds = 0, audioCtx = null;
 
 window.addEventListener('DOMContentLoaded', () => {
   const myId = getMyDeviceId();
@@ -54,13 +62,14 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 function bootApp(params) {
-  // Handle 1-click Magic Invite link (?add=VX-XXXX&pin=123456&name=Laptop)
   const addId = (params.get('add') || '').trim().toUpperCase();
   const addPin = (params.get('pin') || '').trim();
   const addName = (params.get('name') || '').trim();
+  isDirectSingleChatMode = params.get('direct') === '1';
+
   if (addId && addPin.length >= 4 && addId !== getMyDeviceId()) {
-    saveContact(addId, { name: addName || addId, pin: addPin, lastTs: Date.now() });
-    history.replaceState({}, '', '/');
+    saveContact(addId, { name: addName || addId, pin: addPin, lastTs: Date.now(), unread: 0 });
+    if (!isDirectSingleChatMode) history.replaceState({}, '', '/');
   }
 
   rtc = new VoxaRtcEngine({
@@ -70,14 +79,12 @@ function bootApp(params) {
     onPeerStatusChanged: async (peerId, isOnline) => {
       if (isOnline) {
         onlinePeers.add(peerId);
-        // Flush any queued offline messages (Tick 1 -> delivered ACK turns it Tick 2)
         const msgs = await getMessagesForPeer(peerId);
         for (const m of msgs) {
           if (m.dir === 'out' && (m.tick || 1) === 1 && m.kind === 'text') {
             await rtc.sendEncryptedText(peerId, m);
           }
         }
-        // Send Read Receipt ONLY if user is actively viewing this exact chat right now
         if (activePeerId === peerId && document.visibilityState === 'visible') {
           flushReadReceiptsForActiveChat();
         }
@@ -90,7 +97,7 @@ function bootApp(params) {
     onIncomingPairRequest: (remoteDevId, decideCb) => {
       const modal = document.getElementById('approvalModal');
       document.getElementById('approvalMessage').textContent =
-        `Device [${remoteDevId}] wants to connect. Enter the same PIN you set on that device.`;
+        `Device [${remoteDevId}] wants to connect. Enter the same PIN set on that device.`;
       modal.classList.remove('hidden');
 
       document.getElementById('btnBlockPeer').onclick = () => {
@@ -98,7 +105,7 @@ function bootApp(params) {
         decideCb(false);
       };
       document.getElementById('btnAllowPeer').onclick = () => {
-        const pin = prompt('Enter the shared Secret PIN to accept:');
+        const pin = prompt('Enter shared Secret PIN:');
         if (!pin || pin.length < 4) return showToast('PIN must be 4+ chars');
         modal.classList.add('hidden');
         decideCb(true, pin.trim(), remoteDevId);
@@ -108,21 +115,21 @@ function bootApp(params) {
     onIncomingText: async (peerId, pkt) => {
       const msg = { id: pkt.id, peerId, kind: 'text', text: pkt.text, dir: 'in', ts: pkt.ts };
       await saveMessageRecord(msg);
-      const isViewingThisChat = (activePeerId === peerId && document.visibilityState === 'visible');
+      const isViewing = (activePeerId === peerId && document.visibilityState === 'visible');
 
       saveContact(peerId, {
         lastMsg: pkt.text,
         lastTs: pkt.ts,
-        unread: isViewingThisChat ? 0 : ((getContacts()[peerId]?.unread || 0) + 1)
+        unread: isViewing ? 0 : ((getContacts()[peerId]?.unread || 0) + 1)
       });
 
-      if (isViewingThisChat) {
-        appendBubbleToStream(msg, handleBubbleSelect);
+      if (isViewing) {
+        appendBubbleToStream(msg, bubbleHandlers);
         rtc.sendReadAck(peerId, [pkt.id]);
       } else {
         if (!unreadIncomingIds.has(peerId)) unreadIncomingIds.set(peerId, new Set());
         unreadIncomingIds.get(peerId).add(pkt.id);
-        showToast(`New message from ${getContacts()[peerId]?.name || peerId}`);
+        showToast(`Message from ${getContacts()[peerId]?.name || peerId}`);
       }
       refreshHomeUI();
     },
@@ -131,21 +138,21 @@ function bootApp(params) {
         id: pkt.id, peerId, kind: 'file', name: pkt.name, size: pkt.size, mime: pkt.mime, blob: pkt.blob, dir: 'in', ts: pkt.ts
       };
       await saveMessageRecord(msg);
-      const isViewingThisChat = (activePeerId === peerId && document.visibilityState === 'visible');
+      const isViewing = (activePeerId === peerId && document.visibilityState === 'visible');
 
       saveContact(peerId, {
-        lastMsg: `📎 ${pkt.name}`,
+        lastMsg: pkt.mime.startsWith('image/') ? '📷 Photo' : (pkt.mime.startsWith('video/') ? '🎥 Video' : `📎 ${pkt.name}`),
         lastTs: pkt.ts,
-        unread: isViewingThisChat ? 0 : ((getContacts()[peerId]?.unread || 0) + 1)
+        unread: isViewing ? 0 : ((getContacts()[peerId]?.unread || 0) + 1)
       });
 
-      if (isViewingThisChat) {
-        appendBubbleToStream(msg, handleBubbleSelect);
+      if (isViewing) {
+        appendBubbleToStream(msg, bubbleHandlers);
         rtc.sendReadAck(peerId, [pkt.id]);
       } else {
         if (!unreadIncomingIds.has(peerId)) unreadIncomingIds.set(peerId, new Set());
         unreadIncomingIds.get(peerId).add(pkt.id);
-        showToast(`File received: ${pkt.name}`);
+        showToast(`Media received from ${getContacts()[peerId]?.name || peerId}`);
       }
       refreshHomeUI();
     },
@@ -159,9 +166,7 @@ function bootApp(params) {
         msgIds.forEach((id) => setBubbleTickUI(id, 3));
       }
     },
-    onPinError: (peerId) => {
-      showToast(`PIN mismatch with ${peerId}`);
-    },
+    onPinError: (peerId) => showToast(`PIN mismatch with ${peerId}`),
     onIncomingCall: (callerDevId, callObj) => {
       incomingCall = callObj;
       const wantVideo = callObj.metadata?.video !== false;
@@ -183,13 +188,101 @@ function bootApp(params) {
   setupUIEvents();
   setupVoiceMic();
   refreshHomeUI();
+
+  // Direct Single-Chat Mode for Native Android App (Skips Home Screen)
+  if (isDirectSingleChatMode) {
+    const targetPeer = addId || Object.keys(getContacts())[0];
+    if (targetPeer) {
+      document.getElementById('btnBackHome').classList.add('hidden');
+      openChatScreen(targetPeer);
+    }
+  }
+}
+
+const bubbleHandlers = {
+  isSelectionActive: () => selectedRecords.size > 0,
+  onToggleSelect: (msg, bubbleEl, checkEl) => {
+    if (selectedRecords.has(msg.id)) {
+      selectedRecords.delete(msg.id);
+      bubbleEl.classList.remove('selected');
+      checkEl.classList.add('hidden');
+    } else {
+      selectedRecords.set(msg.id, { msg, bubbleEl, checkEl });
+      bubbleEl.classList.add('selected');
+      checkEl.classList.remove('hidden');
+    }
+    updateSelectionBarUI();
+  },
+  onOpenLightbox: (msg, isVideo) => openMediaLightbox(msg, isVideo)
+};
+
+function updateSelectionBarUI() {
+  const bar = document.getElementById('copyBar');
+  if (selectedRecords.size === 0) {
+    bar.classList.add('hidden');
+    return;
+  }
+  bar.classList.remove('hidden');
+  document.getElementById('lblSelectedCount').textContent = `${selectedRecords.size} selected`;
+
+  const items = Array.from(selectedRecords.values()).map((x) => x.msg);
+  const photoCount = items.filter((m) => m.kind === 'file' && (m.mime || '').startsWith('image/')).length;
+  document.getElementById('lblCopyBtnText').textContent =
+    photoCount > 1 ? `Copy ${photoCount} Photos` : (photoCount === 1 ? 'Copy Photo' : 'Copy');
+}
+
+function clearAllSelections() {
+  selectedRecords.forEach(({ bubbleEl, checkEl }) => {
+    bubbleEl.classList.remove('selected');
+    checkEl.classList.add('hidden');
+  });
+  selectedRecords.clear();
+  updateSelectionBarUI();
+}
+
+function openMediaLightbox(msg, isVideo) {
+  lightboxCurrentMsg = msg;
+  const url = msg._objectUrl || (msg.blob ? URL.createObjectURL(msg.blob) : msg.url);
+  const imgEl = document.getElementById('lightboxImg');
+  const vidEl = document.getElementById('lightboxVid');
+  const copyBtn = document.getElementById('btnLightboxCopy');
+  const dlBtn = document.getElementById('btnLightboxDownload');
+
+  document.getElementById('lightboxSizeBadge').textContent = formatBytes(msg.size);
+  dlBtn.href = url;
+  dlBtn.download = msg.name || (isVideo ? 'video.mp4' : 'photo.png');
+
+  if (isVideo) {
+    imgEl.classList.add('hidden');
+    copyBtn.classList.add('hidden');
+    vidEl.src = url;
+    vidEl.classList.remove('hidden');
+    vidEl.play().catch(() => {});
+  } else {
+    vidEl.pause();
+    vidEl.classList.add('hidden');
+    copyBtn.classList.remove('hidden');
+    imgEl.src = url;
+    imgEl.classList.remove('hidden');
+  }
+  document.getElementById('mediaLightbox').classList.remove('hidden');
+}
+
+function closeMediaLightbox() {
+  const vidEl = document.getElementById('lightboxVid');
+  vidEl.pause();
+  vidEl.src = '';
+  document.getElementById('mediaLightbox').classList.add('hidden');
+  lightboxCurrentMsg = null;
 }
 
 function refreshHomeUI() {
+  if (isDirectSingleChatMode) return;
   renderContactList(onlinePeers, (peerId) => openChatScreen(peerId));
 }
 
 async function openChatScreen(peerId) {
+  clearAllSelections();
   activePeerId = peerId;
   saveContact(peerId, { unread: 0 });
   refreshHomeUI();
@@ -201,7 +294,7 @@ async function openChatScreen(peerId) {
   const stream = document.getElementById('chatStream');
   stream.innerHTML = '';
   const history = await getMessagesForPeer(peerId);
-  history.forEach((m) => appendBubbleToStream(m, handleBubbleSelect));
+  history.forEach((m) => appendBubbleToStream(m, bubbleHandlers));
 
   flushReadReceiptsForActiveChat();
 }
@@ -229,13 +322,11 @@ function updateActiveChatHeader() {
 }
 
 function setupUIEvents() {
-  // Copy Own Device ID
   document.getElementById('btnCopyMyId').onclick = () => {
     navigator.clipboard.writeText(getMyDeviceId());
     showToast(`Copied ID: ${getMyDeviceId()}`);
   };
 
-  // Add Device Modal
   const openAdd = () => document.getElementById('addDeviceModal').classList.remove('hidden');
   document.getElementById('btnOpenAddDevice').onclick = openAdd;
   document.getElementById('fabNewChat').onclick = openAdd;
@@ -254,7 +345,6 @@ function setupUIEvents() {
     openChatScreen(targetId);
   };
 
-  // Settings Modal (Retention 1-10 Days + Cache Usage)
   document.getElementById('btnOpenSettings').onclick = async () => {
     document.getElementById('selRetentionDays').value = String(getRetentionDays());
     const used = await enforceRetentionAndCap();
@@ -269,8 +359,8 @@ function setupUIEvents() {
     showToast(`Retention set to ${getRetentionDays()} day(s)`);
   };
 
-  // Back to Home Screen
   document.getElementById('btnBackHome').onclick = () => {
+    clearAllSelections();
     stopVoiceMic();
     activePeerId = null;
     document.getElementById('chatScreen').classList.add('hidden');
@@ -278,13 +368,16 @@ function setupUIEvents() {
     refreshHomeUI();
   };
 
-  // Chat 3-Dot Menu
   const chatDd = document.getElementById('chatDropdown');
   document.getElementById('btnChatMenu').onclick = (e) => {
     e.stopPropagation();
     chatDd.classList.toggle('hidden');
   };
   document.body.onclick = () => chatDd.classList.add('hidden');
+
+  document.getElementById('btnSelectModeMenu').onclick = () => {
+    showToast('Tap & hold any photo or message to multi-select');
+  };
 
   document.getElementById('btnRenameContact').onclick = () => {
     if (!activePeerId) return;
@@ -307,6 +400,7 @@ function setupUIEvents() {
 
   document.getElementById('btnClearThisChat').onclick = async () => {
     if (!activePeerId) return;
+    clearAllSelections();
     await clearMessagesForPeer(activePeerId);
     document.getElementById('chatStream').innerHTML = '';
     showToast('Chat cleared');
@@ -314,13 +408,36 @@ function setupUIEvents() {
 
   document.getElementById('btnUnpairContact').onclick = async () => {
     if (!activePeerId) return;
+    clearAllSelections();
     await clearMessagesForPeer(activePeerId);
     removeContact(activePeerId);
     document.getElementById('btnBackHome').click();
     showToast('Device unpaired');
   };
 
-  // Input Bar & Pickers
+  // Multi-Select Copy Action
+  document.getElementById('btnCancelCopy').onclick = clearAllSelections;
+  document.getElementById('btnConfirmCopy').onclick = async () => {
+    const items = Array.from(selectedRecords.values()).map((x) => x.msg);
+    const photos = items.filter((m) => m.kind === 'file' && (m.mime || '').startsWith('image/'));
+    const texts = items.filter((m) => m.kind === 'text').map((m) => m.text);
+
+    if (photos.length > 0) {
+      await copyImagesToClipboard(photos);
+    } else if (texts.length > 0) {
+      await navigator.clipboard.writeText(texts.join('\n'));
+      showToast('Copied text');
+    }
+    clearAllSelections();
+  };
+
+  // Lightbox Controls
+  document.getElementById('btnLightboxClose').onclick = closeMediaLightbox;
+  document.getElementById('btnLightboxCopy').onclick = () => {
+    if (lightboxCurrentMsg) copyImagesToClipboard([lightboxCurrentMsg]);
+  };
+
+  // Composer & Pickers
   const inp = document.getElementById('msgInput');
   inp.oninput = updateFabIcon;
   inp.onkeydown = (e) => { if (e.key === 'Enter') handleFabClick(); };
@@ -337,12 +454,11 @@ function setupUIEvents() {
   document.getElementById('fileFolderPicker').onchange = onFilesChosen;
   document.getElementById('galleryMediaPicker').onchange = onFilesChosen;
 
-  // Long-press Copy Bar
-  document.getElementById('btnCancelCopy').onclick = clearCopySelection;
-  document.getElementById('btnConfirmCopy').onclick = () => {
-    if (selectedCopyText) navigator.clipboard.writeText(selectedCopyText);
-    showToast('Copied');
-    clearCopySelection();
+  // Native Android Bridge Hook (for direct single-chat file push)
+  window.receiveFileFromAndroid = async (base64, name, mime) => {
+    const res = await fetch(`data:${mime};base64,${base64}`);
+    const blob = await res.blob();
+    await sendFileMessage(new File([blob], name, { type: mime }));
   };
 
   // Calls
@@ -351,44 +467,32 @@ function setupUIEvents() {
   document.getElementById('btnAcceptCall').onclick = acceptCall;
   document.getElementById('btnDeclineCall').onclick = declineCall;
   document.getElementById('btnCallHangup').onclick = () => cleanupCallUI(true);
+
   document.getElementById('btnCallMute').onclick = () => {
     if (!localStream) return;
     isMuted = !isMuted;
     localStream.getAudioTracks().forEach((t) => (t.enabled = !isMuted));
-    document.getElementById('btnCallMute').textContent = isMuted ? '🔇' : '🎙️';
+    document.getElementById('svgCallMicOn').classList.toggle('hidden', isMuted);
+    document.getElementById('svgCallMicOff').classList.toggle('hidden', !isMuted);
   };
+
   document.getElementById('btnCallVideoToggle').onclick = () => {
     if (!localStream) return;
     const tracks = localStream.getVideoTracks();
     if (!tracks.length) return;
-    const next = !tracks[0].enabled;
-    tracks.forEach((t) => (t.enabled = next));
-    document.getElementById('localVideo').style.display = next ? 'block' : 'none';
+    isCamOff = !isCamOff;
+    tracks.forEach((t) => (t.enabled = !isCamOff));
+    document.getElementById('localVideo').style.display = isCamOff ? 'none' : 'block';
+    document.getElementById('svgCallCamOn').classList.toggle('hidden', isCamOff);
+    document.getElementById('svgCallCamOff').classList.toggle('hidden', !isCamOff);
   };
 
-  // Visibility Read Receipt Sync
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') stopVoiceMic();
     else if (document.visibilityState === 'visible') flushReadReceiptsForActiveChat();
   });
 }
 
-function handleBubbleSelect(text, bubbleEl) {
-  clearCopySelection();
-  selectedCopyText = text;
-  selectedBubble = bubbleEl;
-  bubbleEl.classList.add('selected');
-  document.getElementById('copyBar').classList.remove('hidden');
-}
-
-function clearCopySelection() {
-  if (selectedBubble) selectedBubble.classList.remove('selected');
-  selectedBubble = null;
-  selectedCopyText = '';
-  document.getElementById('copyBar').classList.add('hidden');
-}
-
-// Sending Text & Files
 async function sendTextMessage() {
   stopVoiceMic();
   if (!activePeerId) return;
@@ -411,7 +515,7 @@ async function sendTextMessage() {
 
   await saveMessageRecord(msg);
   saveContact(activePeerId, { lastMsg: text, lastTs: msg.ts });
-  appendBubbleToStream(msg, handleBubbleSelect);
+  appendBubbleToStream(msg, bubbleHandlers);
   refreshHomeUI();
 
   await rtc.sendEncryptedText(activePeerId, msg);
@@ -419,26 +523,30 @@ async function sendTextMessage() {
 
 async function sendFileMessage(file) {
   if (!activePeerId) return;
+  const mime = file.type || 'application/octet-stream';
   const msg = {
     id: `f-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     peerId: activePeerId,
     kind: 'file',
     name: file.name,
     size: file.size,
-    mime: file.type || 'application/octet-stream',
+    mime,
     blob: file,
     dir: 'out',
     ts: Date.now(),
     tick: 1
   };
 
-  await saveMessageRecord(msg); // Automatically skips if > 50MB
-  saveContact(activePeerId, { lastMsg: `📎 ${file.name}`, lastTs: msg.ts });
-  appendBubbleToStream(msg, handleBubbleSelect);
+  await saveMessageRecord(msg);
+  saveContact(activePeerId, {
+    lastMsg: mime.startsWith('image/') ? '📷 Photo' : (mime.startsWith('video/') ? '🎥 Video' : `📎 ${file.name}`),
+    lastTs: msg.ts
+  });
+  appendBubbleToStream(msg, bubbleHandlers);
   refreshHomeUI();
 
   const sent = await rtc.sendEncryptedFile(activePeerId, msg, null);
-  if (!sent) showToast('Peer offline — connect device to send files');
+  if (!sent) showToast('Peer offline — connect device to send');
 }
 
 // Waveform Mic Controls
@@ -515,7 +623,7 @@ function stopVoiceMic() {
   updateFabIcon();
 }
 
-// Audio/Video Call Functions
+// Audio/Video Call Functions + Live Call Timer
 function startRingtone() {
   stopRingtone();
   const play = () => {
@@ -537,6 +645,17 @@ function startRingtone() {
 
 function stopRingtone() {
   if (ringTimer) { clearInterval(ringTimer); ringTimer = null; }
+}
+
+function startCallTimer() {
+  clearInterval(callDurationTimer);
+  callSeconds = 0;
+  callDurationTimer = setInterval(() => {
+    callSeconds++;
+    const mins = String(Math.floor(callSeconds / 60)).padStart(2, '0');
+    const secs = String(callSeconds % 60).padStart(2, '0');
+    document.getElementById('callTimerLabel').textContent = `${mins}:${secs} • E2EE`;
+  }, 1000);
 }
 
 async function initiateCall(withVideo) {
@@ -596,7 +715,7 @@ function bindCallStream(call) {
     document.getElementById('remoteVideo').srcObject = remote;
     const hasVid = remote.getVideoTracks().length > 0;
     document.getElementById('callAvatarCenter').style.display = hasVid ? 'none' : 'block';
-    document.getElementById('callTimerLabel').textContent = 'Connected • E2EE';
+    startCallTimer();
   });
   call.on('close', () => cleanupCallUI(false));
   call.on('error', () => cleanupCallUI(false));
@@ -604,11 +723,16 @@ function bindCallStream(call) {
 
 function cleanupCallUI(notifyRemote) {
   stopRingtone();
+  clearInterval(callDurationTimer);
   if (notifyRemote && activePeerId) rtc.sendCallControl(activePeerId, 'end');
   if (activeCall) { try { activeCall.close(); } catch (_) {} activeCall = null; }
   if (localStream) { localStream.getTracks().forEach((t) => t.stop()); localStream = null; }
   isMuted = false;
-  document.getElementById('btnCallMute').textContent = '🎙️';
+  isCamOff = false;
+  document.getElementById('svgCallMicOn').classList.remove('hidden');
+  document.getElementById('svgCallMicOff').classList.add('hidden');
+  document.getElementById('svgCallCamOn').classList.remove('hidden');
+  document.getElementById('svgCallCamOff').classList.add('hidden');
   document.getElementById('remoteVideo').srcObject = null;
   document.getElementById('callOverlay').classList.add('hidden');
 }
