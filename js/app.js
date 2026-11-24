@@ -18,17 +18,12 @@ let activePeerId = null;
 let isDirectSingleChatMode = false;
 const onlinePeers = new Set();
 const unreadIncomingIds = new Map();
+const memoryLargeFileQueue = new Map(); // For >50MB files queued while offline
 
-// Multi-Select State (Supports multiple photos and/or text messages)
-const selectedRecords = new Map(); // msgId -> { msg, bubbleEl, checkEl }
-
-// Lightbox State
+const selectedRecords = new Map();
 let lightboxCurrentMsg = null;
 
-// Continuous Voice Mic State
 let recognition = null, isListening = false, manualStop = false, voiceBuffer = '';
-
-// Call State & Timer
 let activeCall = null, incomingCall = null, localStream = null;
 let isMuted = false, isCamOff = false, ringTimer = null, callDurationTimer = null, callSeconds = 0, audioCtx = null;
 
@@ -39,6 +34,14 @@ window.addEventListener('DOMContentLoaded', () => {
 
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
+  }
+
+  // Keep chat stream scrolled above mobile keyboard whenever keyboard opens
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', () => {
+      const stream = document.getElementById('chatStream');
+      if (stream) stream.scrollTop = stream.scrollHeight;
+    });
   }
 
   const params = new URLSearchParams(location.search);
@@ -79,12 +82,24 @@ function bootApp(params) {
     onPeerStatusChanged: async (peerId, isOnline) => {
       if (isOnline) {
         onlinePeers.add(peerId);
+        // Flush ALL queued offline messages AND offline photos/files from IndexedDB
         const msgs = await getMessagesForPeer(peerId);
         for (const m of msgs) {
-          if (m.dir === 'out' && (m.tick || 1) === 1 && m.kind === 'text') {
-            await rtc.sendEncryptedText(peerId, m);
+          if (m.dir === 'out' && (m.tick || 1) === 1) {
+            if (m.kind === 'text') {
+              await rtc.sendEncryptedText(peerId, m);
+            } else if (m.kind === 'file' && m.blob) {
+              await rtc.sendEncryptedFile(peerId, m, null);
+            }
           }
         }
+        // Flush any >50MB files held in RAM queue
+        const bigQueue = memoryLargeFileQueue.get(peerId) || [];
+        while (bigQueue.length > 0) {
+          const item = bigQueue.shift();
+          await rtc.sendEncryptedFile(peerId, item, null);
+        }
+
         if (activePeerId === peerId && document.visibilityState === 'visible') {
           flushReadReceiptsForActiveChat();
         }
@@ -97,7 +112,7 @@ function bootApp(params) {
     onIncomingPairRequest: (remoteDevId, decideCb) => {
       const modal = document.getElementById('approvalModal');
       document.getElementById('approvalMessage').textContent =
-        `Device [${remoteDevId}] wants to connect. Enter the same PIN set on that device.`;
+        `Security Check: Device [${remoteDevId}] wants to pair. Enter your Secret PIN to verify.`;
       modal.classList.remove('hidden');
 
       document.getElementById('btnBlockPeer').onclick = () => {
@@ -166,7 +181,9 @@ function bootApp(params) {
         msgIds.forEach((id) => setBubbleTickUI(id, 3));
       }
     },
-    onPinError: (peerId) => showToast(`PIN mismatch with ${peerId}`),
+    onPinError: (peerId) => {
+      showToast(`Security Alert: Invalid PIN from ${peerId}`);
+    },
     onIncomingCall: (callerDevId, callObj) => {
       incomingCall = callObj;
       const wantVideo = callObj.metadata?.video !== false;
@@ -189,7 +206,6 @@ function bootApp(params) {
   setupVoiceMic();
   refreshHomeUI();
 
-  // Direct Single-Chat Mode for Native Android App (Skips Home Screen)
   if (isDirectSingleChatMode) {
     const targetPeer = addId || Object.keys(getContacts())[0];
     if (targetPeer) {
@@ -415,7 +431,6 @@ function setupUIEvents() {
     showToast('Device unpaired');
   };
 
-  // Multi-Select Copy Action
   document.getElementById('btnCancelCopy').onclick = clearAllSelections;
   document.getElementById('btnConfirmCopy').onclick = async () => {
     const items = Array.from(selectedRecords.values()).map((x) => x.msg);
@@ -431,20 +446,33 @@ function setupUIEvents() {
     clearAllSelections();
   };
 
-  // Lightbox Controls
   document.getElementById('btnLightboxClose').onclick = closeMediaLightbox;
   document.getElementById('btnLightboxCopy').onclick = () => {
     if (lightboxCurrentMsg) copyImagesToClipboard([lightboxCurrentMsg]);
   };
 
-  // Composer & Pickers
+  // Keep keyboard open continuously when typing & sending
   const inp = document.getElementById('msgInput');
   inp.oninput = updateFabIcon;
-  inp.onkeydown = (e) => { if (e.key === 'Enter') handleFabClick(); };
-  document.getElementById('fabMicSend').onclick = handleFabClick;
+  inp.onfocus = () => {
+    setTimeout(() => {
+      const stream = document.getElementById('chatStream');
+      stream.scrollTop = stream.scrollHeight;
+    }, 120);
+  };
+  inp.onkeydown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleFabClick(true);
+    }
+  };
+  document.getElementById('fabMicSend').onclick = (e) => {
+    e.preventDefault();
+    handleFabClick(true);
+  };
 
   document.getElementById('btnPickFiles').onclick = () => document.getElementById('fileFolderPicker').click();
-  document.getElementById('btnPickGallery').onclick = () => document.getElementById('galleryMediaPicker').click();
+  document.getElementById('btnOpenCamera').onclick = () => document.getElementById('cameraCapturePicker').click();
 
   const onFilesChosen = async (e) => {
     const files = Array.from(e.target.files || []);
@@ -452,9 +480,8 @@ function setupUIEvents() {
     e.target.value = '';
   };
   document.getElementById('fileFolderPicker').onchange = onFilesChosen;
-  document.getElementById('galleryMediaPicker').onchange = onFilesChosen;
+  document.getElementById('cameraCapturePicker').onchange = onFilesChosen;
 
-  // Native Android Bridge Hook (for direct single-chat file push)
   window.receiveFileFromAndroid = async (base64, name, mime) => {
     const res = await fetch(`data:${mime};base64,${base64}`);
     const blob = await res.blob();
@@ -493,15 +520,17 @@ function setupUIEvents() {
   });
 }
 
-async function sendTextMessage() {
+async function sendTextMessage(keepKeyboardOpen = true) {
   stopVoiceMic();
   if (!activePeerId) return;
   const inp = document.getElementById('msgInput');
   const text = inp.value.trim();
   if (!text) return;
+
   inp.value = '';
   voiceBuffer = '';
   updateFabIcon();
+  if (keepKeyboardOpen) inp.focus(); // Prevents mobile keyboard from closing after send
 
   const msg = {
     id: `m-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -546,10 +575,15 @@ async function sendFileMessage(file) {
   refreshHomeUI();
 
   const sent = await rtc.sendEncryptedFile(activePeerId, msg, null);
-  if (!sent) showToast('Peer offline — connect device to send');
+  if (!sent) {
+    if (file.size > 50 * 1024 * 1024) {
+      if (!memoryLargeFileQueue.has(activePeerId)) memoryLargeFileQueue.set(activePeerId, []);
+      memoryLargeFileQueue.get(activePeerId).push(msg);
+    }
+    showToast('Queued — will auto-send as soon as device reconnects');
+  }
 }
 
-// Waveform Mic Controls
 function updateFabIcon() {
   const hasText = document.getElementById('msgInput').value.trim().length > 0;
   document.getElementById('svgMic').classList.toggle('hidden', isListening || hasText);
@@ -560,13 +594,13 @@ function updateFabIcon() {
 function setWaveformVisible(show) {
   document.getElementById('msgInput').classList.toggle('hidden', show);
   document.getElementById('btnPickFiles').classList.toggle('hidden', show);
-  document.getElementById('btnPickGallery').classList.toggle('hidden', show);
+  document.getElementById('btnOpenCamera').classList.toggle('hidden', show);
   document.getElementById('waveformBox').classList.toggle('hidden', !show);
 }
 
-function handleFabClick() {
+function handleFabClick(keepKeyboard = false) {
   if (isListening) { stopVoiceMic(); return; }
-  if (document.getElementById('msgInput').value.trim().length > 0) sendTextMessage();
+  if (document.getElementById('msgInput').value.trim().length > 0) sendTextMessage(keepKeyboard);
   else startVoiceMic();
 }
 
@@ -623,7 +657,6 @@ function stopVoiceMic() {
   updateFabIcon();
 }
 
-// Audio/Video Call Functions + Live Call Timer
 function startRingtone() {
   stopRingtone();
   const play = () => {
