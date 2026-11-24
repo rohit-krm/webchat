@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content" />
   <title>Voxa Chat</title>
   <link rel="manifest" href="/manifest.json" />
   <meta name="theme-color" content="#1f2c34" />
@@ -68,7 +68,7 @@
   <!-- VIEW 2: ACTIVE CHAT SCREEN                                -->
   <!-- ========================================================= -->
   <div id="chatScreen" class="screen-view hidden">
-    <!-- Multi-Select Action Bar (Copy Multiple Photos or Text) -->
+    <!-- Multi-Select Action Bar -->
     <div id="copyBar" class="copy-bar hidden">
       <div class="copy-bar-left">
         <button id="btnCancelCopy" class="bar-icon-btn" title="Cancel Selection">
@@ -119,7 +119,7 @@
 
     <div id="chatStream" class="chat-stream"></div>
 
-    <!-- WhatsApp Input Dock with Live Waveform -->
+    <!-- WhatsApp Input Dock with Live Waveform & Instant Camera -->
     <div class="composer-dock">
       <div class="input-pill">
         <input type="text" id="msgInput" placeholder="Message" autocomplete="off" />
@@ -132,14 +132,16 @@
         </div>
 
         <input type="file" id="fileFolderPicker" multiple hidden />
-        <input type="file" id="galleryMediaPicker" accept="image/*,video/*" multiple hidden />
+        <input type="file" id="cameraCapturePicker" accept="image/*,video/*" capture="environment" hidden />
 
-        <button id="btnPickFiles" class="dock-btn" title="Files & Folders">
+        <!-- Attach Any File / Gallery -->
+        <button id="btnPickFiles" class="dock-btn" title="Files, Photos & Folders">
           <svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5a2.5 2.5 0 0 1 5 0v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5a2.5 2.5 0 0 0 5 0V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z"/></svg>
         </button>
 
-        <button id="btnPickGallery" class="dock-btn" title="Gallery Photos & Videos">
-          <svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
+        <!-- Direct Camera Icon (Opens Camera instantly like WhatsApp) -->
+        <button id="btnOpenCamera" class="dock-btn" title="Take Photo or Video">
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
         </button>
       </div>
 
@@ -158,7 +160,7 @@
     <div class="lightbox-top">
       <div id="lightboxSizeBadge" class="lightbox-meta">1.2 MB</div>
       <div class="lightbox-actions">
-        <button id="btnLightboxCopy" class="lb-btn" title="Copy Image">
+        <button id="btnLightboxCopy" class="lb-btn" title="Copy Full-Quality Image">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
           <span>Copy</span>
         </button>
@@ -195,19 +197,16 @@
     </div>
 
     <div class="call-glass-dock">
-      <!-- Mute / Unmute SVG -->
       <button id="btnCallMute" class="call-ctrl-btn" title="Mute">
         <svg id="svgCallMicOn" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
         <svg id="svgCallMicOff" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="hidden"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
       </button>
 
-      <!-- Camera On / Off SVG -->
       <button id="btnCallVideoToggle" class="call-ctrl-btn" title="Toggle Camera">
         <svg id="svgCallCamOn" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
         <svg id="svgCallCamOff" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="hidden"><path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.66 0H14a2 2 0 0 1 2 2v3.34l1 1L23 7v10"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
       </button>
 
-      <!-- End Call (Hangup) SVG -->
       <button id="btnCallHangup" class="call-ctrl-btn end-call" title="End Call">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08c-.18-.17-.29-.42-.29-.7 0-.28.11-.53.29-.71C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67c.18.18.29.43.29.71 0 .28-.11.53-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.11-.7-.28-.79-.74-1.69-1.36-2.67-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/></svg>
       </button>
